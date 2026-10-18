@@ -1,15 +1,16 @@
 {
     "1.0.0": {
         "version": "1.0.0",
-        "dataset_hash": "5845487522144317562",
+        "dataset_hash": "fa3307870c343f7b75ec453fb12c874977374190a0d4c0696ce679b04321499e",
         "metrics": {
-            "mae": 0.5051455393785722,
-            "rmse": 0.6411405486235888,
-            "r2": 0.6968047265027542
+            "mae": 4.46782107571708,
+            "rmse": 6.07642884983232,
+            "r2": -6.384597513414907
         },
         "features": {
             "numerical_features": [
                 "tx1_score",
+                "tx2_score",
                 "midterm_score",
                 "absence_percentage",
                 "lms_learning_percentage",
@@ -18,7 +19,8 @@
                 "motivation_score"
             ],
             "categorical_features": [
-                "works_part_time"
+                "works_part_time",
+                "major"
             ],
             "target_column": "actual_final_exam_score"
         },

@@ -17,8 +17,10 @@ from haui_student_prediction.services.prediction_service import PredictionServic
 
 from haui_student_prediction.risk.risk_calculator import RiskCalculator
 from haui_student_prediction.services.risk_prediction_service import RiskPredictionService
+from haui_student_prediction.services.report_service import ReportService
 
 from haui_student_prediction.ui.main_window import MainWindow
+
 
 def main():
     config = load_config()
@@ -40,6 +42,7 @@ def main():
 
     risk_calculator = RiskCalculator()
     risk_service = RiskPredictionService(risk_calculator)
+    report_service = ReportService(str(config.report_output_dir))
 
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
@@ -48,9 +51,11 @@ def main():
         dataset_service=dataset_service,
         prediction_service=prediction_service,
         chart_service=chart_service,
-        risk_service=risk_service
+        risk_service=risk_service,
+        report_service=report_service
     )
     window.show()
+
     
     sys.exit(app.exec())
 

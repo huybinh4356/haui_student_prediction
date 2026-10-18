@@ -1,434 +1,162 @@
+from __future__ import annotations
+
+import hashlib
+import logging
+from pathlib import Path
+from typing import Any
+
+import numpy as np
 import pandas as pd
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QPushButton, QFileDialog, QTableWidget, QTableWidgetItem,
-    QMessageBox, QComboBox, QHeaderView, QStackedWidget, QFrame, QApplication
-)
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
+from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtWidgets import (
+    QApplication,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QStyle,
+    QStackedWidget,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
-class MainWindow(QMainWindow):
-    def __init__(self, dataset_service, prediction_service, chart_service, risk_service):
+
+class _MetricCard(QFrame):
+    def __init__(self, title: str, value: str, detail: str = "", tone: str = "blue"):
         super().__init__()
-        self.dataset_service = dataset_service
-        self.prediction_service = prediction_service
-        self.chart_service = chart_service
-        self.risk_service = risk_service
+        self.setObjectName("MetricCard")
+        self.setMinimumHeight(118)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 16, 18, 16)
+        layout.setSpacing(7)
+        self.title_label = QLabel(title)
+        self.title_label.setObjectName("MetricTitle")
+        self.value_label = QLabel(value)
+        self.value_label.setObjectName("MetricValue")
+        self.detail_label = QLabel(detail)
+        self.detail_label.setObjectName("MetricDetail")
+        self.value_label.setProperty("tone", tone)
+        self.value_label.setWordWrap(True)
+        self.detail_label.setWordWrap(True)
+        layout.addWidget(self.title_label)
+        layout.addWidget(self.value_label)
+        layout.addWidget(self.detail_label)
 
-        self.current_df = None
+    def set_value(self, value: str, detail: str | None = None, tone: str | None = None) -> None:
+        self.value_label.setText(value)
+        if detail is not None:
+            self.detail_label.setText(detail)
+        if tone is not None:
+            self.value_label.setProperty("tone", tone)
+            self.style().unpolish(self.value_label)
+            self.style().polish(self.value_label)
 
-        self.setWindowTitle("Hệ thống Dự đoán Kết quả & Nguy cơ Học vụ HaUI")
-        self.resize(1366, 768)
-        self.setStyleSheet("background-color: #F8F9FA; color: #343A40;")
 
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QHBoxLayout(main_widget)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+class _TrainingWorker(QThread):
+    succeeded = pyqtSignal(object)
+    failed = pyqtSignal(str)
 
-        self._setup_sidebar(main_layout)
+    def __init__(self, dataframe: pd.DataFrame, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.dataframe = dataframe.copy(deep=True)
 
-        self.content_area = QStackedWidget()
-        main_layout.addWidget(self.content_area, stretch=1)
-
-        self._init_pages()
-        self.content_area.setCurrentIndex(0)
-
-    def _setup_sidebar(self, parent_layout):
-        sidebar = QFrame()
-        sidebar.setStyleSheet("background-color: #0A2540; color: white;")
-        sidebar.setFixedWidth(250)
-        sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(10, 20, 10, 20)
-        sidebar_layout.setSpacing(10)
-
-        title = QLabel("HaUI Prediction")
-        title.setFont(QFont("Arial", 16, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color: white; margin-bottom: 20px;")
-        sidebar_layout.addWidget(title)
-
-        self.nav_buttons = []
-        nav_items = [
-            "Tổng quan", "Dữ liệu sinh viên", "Phân tích EDA",
-            "Dự đoán điểm cuối kỳ", "Dự đoán nguy cơ học vụ",
-        ]
-
-        for idx, item in enumerate(nav_items):
-            btn = QPushButton(item)
-            btn.setStyleSheet("""
-                QPushButton {
-                    background-color: transparent;
-                    color: white;
-                    text-align: left;
-                    padding: 10px;
-                    border: none;
-                    border-radius: 5px;
-                    font-size: 14px;
-                }
-                QPushButton:hover {
-                    background-color: #113B5E;
-                }
-                QPushButton:checked {
-                    background-color: #0066CC;
-                    font-weight: bold;
-                }
-            """)
-            btn.setCheckable(True)
-            btn.clicked.connect(lambda checked, i=idx: self._switch_page(i))
-            self.nav_buttons.append(btn)
-            sidebar_layout.addWidget(btn)
-
-        if self.nav_buttons:
-            self.nav_buttons[0].setChecked(True)
-
-        sidebar_layout.addStretch()
-        parent_layout.addWidget(sidebar)
-
-    def _switch_page(self, index):
-        for i, btn in enumerate(self.nav_buttons):
-            btn.setChecked(i == index)
-        self.content_area.setCurrentIndex(index)
-        if index == 0:
-            self._update_dashboard()
-
-    def _init_pages(self):
-        self.page_dashboard = QWidget()
-        self.page_import = QWidget()
-        self.page_eda = QWidget()
-        self.page_predict = QWidget()
-        self.page_risk = QWidget()
-
-        self._build_dashboard_page()
-        self._build_import_page()
-        self._build_eda_page()
-        self._build_predict_page()
-        self._build_risk_page()
-
-        self.content_area.addWidget(self.page_dashboard)
-        self.content_area.addWidget(self.page_import)
-        self.content_area.addWidget(self.page_eda)
-        self.content_area.addWidget(self.page_predict)
-        self.content_area.addWidget(self.page_risk)
-
-    def _create_header(self, text):
-        lbl = QLabel(text)
-        lbl.setFont(QFont("Arial", 20, QFont.Weight.Bold))
-        lbl.setStyleSheet("color: #0A2540; margin-bottom: 10px;")
-        return lbl
-
-    def _create_kpi_card(self, title, value, color="#0066CC"):
-        card = QFrame()
-        card.setStyleSheet(
-            f"background-color: white; border-radius: 8px; "
-            f"border-top: 4px solid {color}; padding: 15px;"
-        )
-        layout = QVBoxLayout(card)
-        lbl_title = QLabel(title)
-        lbl_title.setStyleSheet("color: #6C757D; font-size: 14px;")
-        lbl_value = QLabel(value)
-        lbl_value.setStyleSheet(f"color: {color}; font-size: 24px; font-weight: bold;")
-        layout.addWidget(lbl_title)
-        layout.addWidget(lbl_value)
-        return card, lbl_value
-
-    def _build_dashboard_page(self):
-        layout = QVBoxLayout(self.page_dashboard)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.addWidget(self._create_header("Tổng quan hệ thống"))
-
-        kpi_layout = QHBoxLayout()
-        card_total, self.lbl_kpi_total = self._create_kpi_card(
-            "Tổng bản ghi đã nạp", "0", "#0066CC",
-        )
-        card_valid, self.lbl_kpi_valid = self._create_kpi_card(
-            "Trạng thái dữ liệu", "Chưa có dữ liệu", "#28A745",
-        )
-        card_model, self.lbl_kpi_model = self._create_kpi_card(
-            "Mô hình ML", "Đang kiểm tra...", "#6F42C1",
-        )
-
-        kpi_layout.addWidget(card_total)
-        kpi_layout.addWidget(card_valid)
-        kpi_layout.addWidget(card_model)
-
-        layout.addLayout(kpi_layout)
-        layout.addStretch()
-        self._update_dashboard()
-
-    def _update_dashboard(self):
-        if self.current_df is not None:
-            self.lbl_kpi_total.setText(str(len(self.current_df)))
-            self.lbl_kpi_valid.setText("Hợp lệ")
-            self.lbl_kpi_valid.setStyleSheet("color: #28A745; font-size: 24px; font-weight: bold;")
-        else:
-            self.lbl_kpi_total.setText("0")
-            self.lbl_kpi_valid.setText("Chưa nạp")
-            self.lbl_kpi_valid.setStyleSheet("color: #DC3545; font-size: 24px; font-weight: bold;")
-
-        model_ready = False
-        if hasattr(self.prediction_service, "is_model_ready"):
-            model_ready = self.prediction_service.is_model_ready("1.0.0")
-
-        if model_ready:
-            self.lbl_kpi_model.setText("Sẵn sàng (v1.0.0)")
-            self.lbl_kpi_model.setStyleSheet("color: #28A745; font-size: 24px; font-weight: bold;")
-        else:
-            self.lbl_kpi_model.setText("Chưa sẵn sàng dự đoán")
-            self.lbl_kpi_model.setStyleSheet("color: #DC3545; font-size: 20px; font-weight: bold;")
-
-    def _build_import_page(self):
-        layout = QVBoxLayout(self.page_import)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.addWidget(self._create_header("Dữ liệu sinh viên"))
-
-        control_layout = QHBoxLayout()
-        btn_import = QPushButton("Nhập từ file (CSV/Excel)")
-        btn_import.setFixedWidth(200)
-        btn_import.setStyleSheet(
-            "background-color: #0066CC; color: white; "
-            "padding: 10px; border-radius: 5px; font-weight: bold;"
-        )
-        btn_import.clicked.connect(self._handle_import)
-
-        self.lbl_import_status = QLabel("Chưa chọn file")
-        self.lbl_import_status.setStyleSheet("color: #6C757D;")
-
-        control_layout.addWidget(btn_import)
-        control_layout.addWidget(self.lbl_import_status)
-        control_layout.addStretch()
-        layout.addLayout(control_layout)
-
-        self.table_import = QTableWidget()
-        self.table_import.setStyleSheet("background-color: white; border: 1px solid #DEE2E6;")
-        layout.addWidget(self.table_import)
-
-    def _handle_import(self):
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, "Chọn file dữ liệu", "",
-            "Data Files (*.csv *.xlsx *.xls)",
-        )
-        if not file_path:
-            return
-
+    def run(self) -> None:
         try:
-            self.lbl_import_status.setText("Đang xử lý...")
-            QApplication.processEvents()
-
-            from haui_student_prediction.config.course_profiles import DEFAULT_COURSES_WITH_TX2
-            required_cols = ["student_id", "absence_percentage", "tx1_score", "midterm_score"]
-            result = self.dataset_service.import_dataset(
-                file_path, required_cols, DEFAULT_COURSES_WITH_TX2,
-            )
-
-            if result.is_success:
-                self.current_df = result.data
-                warn_msg = ""
-                if result.warnings:
-                    warn_msg = (
-                        f"\nCảnh báo: {len(result.warnings)} bản ghi có điểm "
-                        "ngoài tham chiếu (cần xác nhận thang điểm)."
-                    )
-                self.lbl_import_status.setText(
-                    f"Thành công! Đã nạp {len(self.current_df)} bản ghi.{warn_msg}"
-                )
-                self.lbl_import_status.setStyleSheet("color: #28A745;")
-                self._populate_table(self.table_import, self.current_df)
-                self._update_dashboard()
-                self._refresh_eda_options()
-                if warn_msg:
-                    QMessageBox.information(self, "Cảnh báo thang điểm",
-                        "Một số giá trị điểm nằm ngoài tham chiếu 0-10 (theo risk module). "
-                        "Vui lòng xác nhận thang điểm thực tế của dữ liệu.")
-            else:
-                self.lbl_import_status.setText("Lỗi kiểm tra dữ liệu")
-                self.lbl_import_status.setStyleSheet("color: #DC3545;")
-                dup_info = (
-                    f"\nBản ghi trùng: {len(result.duplicate_indices)}"
-                    if result.duplicate_indices else ""
-                )
-                QMessageBox.warning(
-                    self, "Lỗi Dữ liệu",
-                    f"Thiếu cột: {result.missing_columns}\n"
-                    f"Số lỗi: {len(result.errors)}{dup_info}",
-                )
-        except Exception as e:
-            self.lbl_import_status.setText("Lỗi hệ thống")
-            QMessageBox.critical(self, "Lỗi hệ thống", str(e))
-
-    def _build_eda_page(self):
-        layout = QVBoxLayout(self.page_eda)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.addWidget(self._create_header("Phân tích EDA"))
-
-        control_layout = QHBoxLayout()
-        self.cb_eda_col = QComboBox()
-        self.cb_eda_col.setStyleSheet("padding: 5px; background: white;")
-
-        btn_plot = QPushButton("Vẽ biểu đồ Histogram")
-        btn_plot.setStyleSheet(
-            "background-color: #0066CC; color: white; "
-            "padding: 5px 15px; border-radius: 3px;"
-        )
-        btn_plot.clicked.connect(self._handle_plot)
-
-        control_layout.addWidget(QLabel("Chọn biến phân tích:"))
-        control_layout.addWidget(self.cb_eda_col)
-        control_layout.addWidget(btn_plot)
-        control_layout.addStretch()
-        layout.addLayout(control_layout)
-
-        self.chart_container = QVBoxLayout()
-        chart_widget = QWidget()
-        chart_widget.setLayout(self.chart_container)
-        chart_widget.setStyleSheet("background-color: white; border: 1px solid #DEE2E6;")
-        layout.addWidget(chart_widget, stretch=1)
-
-    def _refresh_eda_options(self):
-        self.cb_eda_col.clear()
-        if self.current_df is not None:
-            num_cols = self.current_df.select_dtypes(include='number').columns.tolist()
-            valid_cols = [c for c in num_cols if c not in ["student_id", "full_name"]]
-            self.cb_eda_col.addItems(valid_cols)
-
-    def _handle_plot(self):
-        if self.current_df is None:
-            QMessageBox.warning(self, "Cảnh báo", "Vui lòng nhập dữ liệu trước.")
-            return
-
-        col = self.cb_eda_col.currentText()
-        if not col:
-            return
-
-        try:
-            self._clear_layout(self.chart_container)
-            fig = self.chart_service.dist_plots.plot_histogram(self.current_df, col)
-            canvas = FigureCanvas(fig)
-            self.chart_container.addWidget(canvas)
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi vẽ biểu đồ", str(e))
-
-    def _clear_layout(self, layout):
-        while layout.count():
-            item = layout.takeAt(0)
-            widget = item.widget()
-            if widget:
-                widget.deleteLater()
-
-    def _build_predict_page(self):
-        layout = QVBoxLayout(self.page_predict)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.addWidget(self._create_header("Dự đoán điểm cuối kỳ"))
-
-        control_layout = QHBoxLayout()
-        self.cb_course_profile = QComboBox()
-        self.cb_course_profile.addItems(["Công thức không có TX2", "Công thức có TX2"])
-        self.cb_course_profile.setStyleSheet("padding: 5px; background: white;")
-
-        btn_train = QPushButton("Huấn luyện mô hình")
-        btn_train.setStyleSheet(
-            "background-color: #FD7E14; color: white; "
-            "padding: 5px 15px; border-radius: 3px; font-weight: bold;"
-        )
-        btn_train.clicked.connect(self._handle_train_model)
-
-        btn_predict = QPushButton("Dự đoán & Tính điểm học phần")
-        btn_predict.setStyleSheet(
-            "background-color: #28A745; color: white; "
-            "padding: 5px 15px; border-radius: 3px; font-weight: bold;"
-        )
-        btn_predict.clicked.connect(self._handle_predict)
-
-        control_layout.addWidget(QLabel("Cấu hình đánh giá:"))
-        control_layout.addWidget(self.cb_course_profile)
-        control_layout.addWidget(btn_train)
-        control_layout.addWidget(btn_predict)
-        control_layout.addStretch()
-        layout.addLayout(control_layout)
-
-        self.table_predict = QTableWidget()
-        self.table_predict.setStyleSheet("background-color: white; border: 1px solid #DEE2E6;")
-        layout.addWidget(self.table_predict)
-
-    def _handle_train_model(self):
-        if self.current_df is None:
-            QMessageBox.warning(
-                self, "Cảnh báo",
-                "Vui lòng nhập dữ liệu có nhãn "
-                "actual_final_exam_score trước.",
-            )
-            return
-
-        if "actual_final_exam_score" not in self.current_df.columns:
-            QMessageBox.warning(
-                self, "Cảnh báo",
-                "Dữ liệu hiện tại không có cột "
-                "'actual_final_exam_score'. "
-                "Cần dữ liệu lịch sử để huấn luyện.",
-            )
-            return
-
-        try:
-            from haui_student_prediction.ml.train_regressor import (
-                train_and_evaluate,
-            )
-            from haui_student_prediction.features.feature_contract import (
-                FeatureContract,
-            )
-            from haui_student_prediction.ml.model_registry import ModelRegistry
+            from sklearn.model_selection import GroupShuffleSplit, train_test_split
             from haui_student_prediction.app_config import load_config
-            import numpy as np
+            from haui_student_prediction.features.feature_contract import FeatureContract
+            from haui_student_prediction.ml.model_registry import ModelRegistry
+            from haui_student_prediction.ml.train_regressor import train_and_evaluate
 
-            config = load_config()
+            target_column = "actual_final_exam_score"
+            if target_column not in self.dataframe.columns:
+                raise ValueError("Dữ liệu không có cột actual_final_exam_score.")
 
-            cat_cols = (
-                ["works_part_time"]
-                if "works_part_time" in self.current_df.columns
-                else []
-            )
-            num_cols = [
-                c for c in [
-                    "tx1_score", "midterm_score",
-                    "absence_percentage", "lms_learning_percentage",
-                    "interaction_score", "stress_score",
-                    "motivation_score",
-                ]
-                if c in self.current_df.columns
+            data = self.dataframe.copy(deep=True)
+            target = pd.to_numeric(data[target_column], errors="coerce")
+            finite_target = target.notna() & np.isfinite(target.astype(float))
+            data = data.loc[finite_target].copy()
+            data[target_column] = target.loc[finite_target].astype(float)
+
+            if len(data) < 6:
+                raise ValueError(
+                    f"Chỉ có {len(data)} bản ghi có điểm cuối kỳ hợp lệ. Cần ít nhất 6 bản ghi để tạo tập huấn luyện và kiểm thử sơ bộ."
+                )
+
+            numeric_candidates = [
+                "tx1_score",
+                "tx2_score",
+                "midterm_score",
+                "absence_percentage",
+                "lms_learning_percentage",
+                "interaction_score",
+                "stress_score",
+                "motivation_score",
+            ]
+            categorical_candidates = ["works_part_time", "major"]
+            numeric_features = [
+                column
+                for column in numeric_candidates
+                if column in data.columns and data[column].notna().any()
+            ]
+            categorical_features = [
+                column
+                for column in categorical_candidates
+                if column in data.columns and data[column].notna().any()
             ]
 
+            if not numeric_features and not categorical_features:
+                raise ValueError("Không có đặc trưng hợp lệ để huấn luyện mô hình.")
+
             contract = FeatureContract(
-                numerical_features=num_cols,
-                categorical_features=cat_cols,
-                target_column="actual_final_exam_score",
+                numerical_features=numeric_features,
+                categorical_features=categorical_features,
+                target_column=target_column,
             )
 
-            rng = np.random.RandomState(42)
-            indices = np.arange(len(self.current_df))
-            rng.shuffle(indices)
-            n_test = max(1, int(len(self.current_df) * 0.2))
-            test_idx = indices[:n_test]
-            train_idx = indices[n_test:]
+            test_size = max(2, int(round(len(data) * 0.2)))
+            test_size = min(test_size, len(data) - 3)
+            if test_size < 2:
+                raise ValueError("Không thể tạo tập kiểm thử có ít nhất 2 bản ghi.")
 
-            df_train = self.current_df.iloc[train_idx].copy()
-            df_test = self.current_df.iloc[test_idx].copy()
-
-            if len(df_train) < 3:
-                QMessageBox.warning(
-                    self, "Cảnh báo",
-                    f"Tập huấn luyện quá nhỏ ({len(df_train)} dòng). "
-                    "Cần ít nhất 3 dòng.",
+            if "student_id" in data.columns and data["student_id"].nunique() >= 5 and data["student_id"].duplicated().any():
+                splitter = GroupShuffleSplit(n_splits=1, test_size=test_size / len(data), random_state=42)
+                train_indices, test_indices = next(
+                    splitter.split(data, data[target_column], groups=data["student_id"].astype(str))
                 )
-                return
+                train_data = data.iloc[train_indices].copy()
+                test_data = data.iloc[test_indices].copy()
+            else:
+                train_data, test_data = train_test_split(
+                    data,
+                    test_size=test_size,
+                    random_state=42,
+                    shuffle=True,
+                )
+                train_data = train_data.copy()
+                test_data = test_data.copy()
 
-            model, metrics = train_and_evaluate(
-                df_train, df_test, contract,
-            )
+            if len(train_data) < 3 or len(test_data) < 2:
+                raise ValueError("Tập train/test không đủ kích thước sau khi chia dữ liệu.")
 
-            dataset_hash = str(
-                pd.util.hash_pandas_object(self.current_df).sum(),
-            )
+            model, metrics = train_and_evaluate(train_data, test_data, contract)
+            dataset_hash = hashlib.sha256(
+                pd.util.hash_pandas_object(data, index=True).values.tobytes()
+            ).hexdigest()
+            config = load_config()
             registry = ModelRegistry(
                 str(config.model_registry_path),
                 str(config.model_artifacts_dir),
@@ -440,129 +168,1299 @@ class MainWindow(QMainWindow):
                 metrics=metrics,
                 contract=contract,
             )
+            if not registry.has_model("1.0.0"):
+                raise RuntimeError("Model đã được lưu nhưng không thể xác minh trạng thái registry.")
 
-            msg = (
-                f"Huấn luyện thành công!\n"
-                f"MAE: {metrics.mae:.4f}\n"
-                f"RMSE: {metrics.rmse:.4f}\n"
+            self.succeeded.emit(
+                {
+                    "version": "1.0.0",
+                    "metrics": metrics,
+                    "train_rows": len(train_data),
+                    "test_rows": len(test_data),
+                    "feature_count": len(contract.get_all_features()),
+                    "dataset_hash": dataset_hash,
+                    "features": contract.get_all_features(),
+                }
             )
-            if np.isnan(metrics.r2):
-                msg += "R2: N/A (tập test quá nhỏ)"
-            else:
-                msg += f"R2: {metrics.r2:.4f}"
+        except Exception as exc:
+            logging.exception("Model training failed")
+            self.failed.emit(str(exc))
 
-            QMessageBox.information(self, "Huấn luyện xong", msg)
-            self._update_dashboard()
-        except Exception as e:
-            QMessageBox.critical(
-                self, "Lỗi huấn luyện", str(e),
-            )
 
-    def _handle_predict(self):
-        if self.current_df is None:
-            QMessageBox.warning(
-                self, "Cảnh báo", "Vui lòng nhập dữ liệu trước.",
-            )
+class MainWindow(QMainWindow):
+    def __init__(self, dataset_service, prediction_service, chart_service, risk_service, report_service=None):
+        super().__init__()
+        self.dataset_service = dataset_service
+        self.prediction_service = prediction_service
+        self.chart_service = chart_service
+        self.risk_service = risk_service
+        self.report_service = report_service
+        self.current_df: pd.DataFrame | None = None
+        self.prediction_df: pd.DataFrame | None = None
+        self.risk_df: pd.DataFrame | None = None
+        self.current_file_path: str | None = None
+        self._training_worker: _TrainingWorker | None = None
+        self._page_titles = [
+            "Tổng quan",
+            "Dữ liệu sinh viên",
+            "Phân tích dữ liệu",
+            "Dự đoán điểm",
+            "Dự đoán nguy cơ học vụ",
+            "Mô hình ML",
+            "Báo cáo",
+            "Cấu hình",
+        ]
+        self._page_subtitles = [
+            "Theo dõi dữ liệu, chất lượng và trạng thái dự đoán.",
+            "Nhập dữ liệu, kiểm tra chất lượng và xem bản ghi đã chuẩn hóa.",
+            "Khám phá phân bố, xu hướng và mối liên hệ trong dữ liệu.",
+            "Ước lượng điểm thi cuối kỳ và điểm học phần dự kiến.",
+            "Đánh giá nguy cơ dựa trên dữ liệu học tập hiện có.",
+            "Theo dõi, huấn luyện và xác minh mô hình dự đoán.",
+            "Xuất dữ liệu và kết quả phân tích đang có.",
+            "Xem cấu hình môi trường và đường dẫn hiện hành.",
+        ]
+        self.setWindowTitle("HaUI Student Analytics")
+        self.setMinimumSize(1100, 720)
+        self.resize(1440, 900)
+        self._apply_theme()
+        self._build_shell()
+        self._build_pages()
+        self._switch_page(0)
+        self._update_all_status()
+
+    def _apply_theme(self) -> None:
+        from haui_student_prediction.ui.theme import APP_STYLESHEET
+        self.setStyleSheet(APP_STYLESHEET)
+
+    def _build_shell(self) -> None:
+        root = QWidget()
+        root_layout = QHBoxLayout(root)
+        root_layout.setContentsMargins(0, 0, 0, 0)
+        root_layout.setSpacing(0)
+        self.setCentralWidget(root)
+
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("Sidebar")
+        self.sidebar.setFixedWidth(242)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(14, 22, 14, 18)
+        sidebar_layout.setSpacing(5)
+
+        brand = QWidget()
+        brand_layout = QVBoxLayout(brand)
+        brand_layout.setContentsMargins(10, 2, 10, 22)
+        brand_layout.setSpacing(5)
+        brand_title = QLabel("HaUI Student Analytics")
+        brand_title.setObjectName("BrandTitle")
+        brand_title.setWordWrap(True)
+        brand_caption = QLabel("ACADEMIC INTELLIGENCE")
+        brand_caption.setObjectName("BrandCaption")
+        brand_layout.addWidget(brand_title)
+        brand_layout.addWidget(brand_caption)
+        sidebar_layout.addWidget(brand)
+
+        nav_label = QLabel("KHÔNG GIAN LÀM VIỆC")
+        nav_label.setObjectName("SidebarSection")
+        sidebar_layout.addWidget(nav_label)
+
+        self.nav_buttons = []
+        nav_items = [
+            ("Tổng quan", "SP_ComputerIcon"),
+            ("Dữ liệu sinh viên", "SP_FileDialogDetailedView"),
+            ("Phân tích dữ liệu", "SP_FileDialogContentsView"),
+            ("Dự đoán điểm", "SP_MediaPlay"),
+            ("Dự đoán nguy cơ học vụ", "SP_MessageBoxWarning"),
+            ("Mô hình ML", "SP_BrowserReload"),
+            ("Báo cáo", "SP_FileDialogListView"),
+        ]
+        standard_icons = {
+            "SP_ComputerIcon": QStyle.StandardPixmap.SP_ComputerIcon,
+            "SP_FileDialogDetailedView": QStyle.StandardPixmap.SP_FileDialogDetailedView,
+            "SP_FileDialogContentsView": QStyle.StandardPixmap.SP_FileDialogContentsView,
+            "SP_MediaPlay": QStyle.StandardPixmap.SP_MediaPlay,
+            "SP_MessageBoxWarning": QStyle.StandardPixmap.SP_MessageBoxWarning,
+            "SP_BrowserReload": QStyle.StandardPixmap.SP_BrowserReload,
+            "SP_FileDialogListView": QStyle.StandardPixmap.SP_FileDialogListView,
+        }
+        for index, (title, icon_key) in enumerate(nav_items):
+            button = QPushButton(title)
+            button.setObjectName("NavButton")
+            button.setCheckable(True)
+            button.setMinimumHeight(42)
+            button.setIcon(QApplication.style().standardIcon(standard_icons[icon_key]))
+            button.clicked.connect(lambda checked=False, i=index: self._switch_page(i))
+            self.nav_buttons.append(button)
+            sidebar_layout.addWidget(button)
+
+        sidebar_layout.addStretch(1)
+        settings_button = QPushButton("Cấu hình ứng dụng")
+        settings_button.setObjectName("NavButton")
+        settings_button.setMinimumHeight(42)
+        settings_button.setCheckable(True)
+        settings_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView))
+        settings_button.clicked.connect(lambda: self._switch_page(7))
+        sidebar_layout.addWidget(settings_button)
+        self.settings_nav_button = settings_button
+
+        sidebar_footer = QLabel("HaUI · Student Performance")
+        sidebar_footer.setObjectName("BrandCaption")
+        sidebar_footer.setWordWrap(True)
+        sidebar_footer.setContentsMargins(10, 12, 10, 0)
+        sidebar_layout.addWidget(sidebar_footer)
+        root_layout.addWidget(self.sidebar)
+
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
+
+        self.topbar = QFrame()
+        self.topbar.setObjectName("TopBar")
+        self.topbar.setFixedHeight(66)
+        top_layout = QHBoxLayout(self.topbar)
+        top_layout.setContentsMargins(26, 10, 26, 10)
+        top_layout.setSpacing(10)
+        self.topbar_context = QLabel("KHÔNG GIAN PHÂN TÍCH")
+        self.topbar_context.setStyleSheet("color:#6B7280;font-size:11px;font-weight:700;letter-spacing:1px;background:transparent;")
+        top_layout.addWidget(self.topbar_context)
+        top_layout.addStretch(1)
+        self.lbl_dataset_badge = QLabel("Chưa có dữ liệu")
+        self.lbl_dataset_badge.setStyleSheet("background:#F2F4F7;color:#475467;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+        self.lbl_model_badge = QLabel("Model chưa sẵn sàng")
+        self.lbl_model_badge.setStyleSheet("background:#FEF3F2;color:#B42318;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+        top_layout.addWidget(self.lbl_dataset_badge)
+        top_layout.addWidget(self.lbl_model_badge)
+        right_layout.addWidget(self.topbar)
+
+        self.content_area = QStackedWidget()
+        self.content_area.setObjectName("ContentArea")
+        right_layout.addWidget(self.content_area, 1)
+        root_layout.addWidget(right_panel, 1)
+
+    def _create_page(self, title: str, subtitle: str) -> tuple[QScrollArea, QWidget, QVBoxLayout]:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        body = QWidget()
+        body.setObjectName("PageBody")
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(28, 24, 28, 30)
+        layout.setSpacing(18)
+        heading = QVBoxLayout()
+        heading.setSpacing(5)
+        title_label = QLabel(title)
+        title_label.setObjectName("PageTitle")
+        subtitle_label = QLabel(subtitle)
+        subtitle_label.setObjectName("PageSubtitle")
+        subtitle_label.setWordWrap(True)
+        heading.addWidget(title_label)
+        heading.addWidget(subtitle_label)
+        layout.addLayout(heading)
+        scroll.setWidget(body)
+        return scroll, body, layout
+
+    def _surface(self, title: str | None = None) -> tuple[QFrame, QVBoxLayout]:
+        frame = QFrame()
+        frame.setObjectName("Surface")
+        layout = QVBoxLayout(frame)
+        layout.setContentsMargins(18, 16, 18, 18)
+        layout.setSpacing(12)
+        if title:
+            label = QLabel(title)
+            label.setObjectName("SectionTitle")
+            layout.addWidget(label)
+        return frame, layout
+
+    def _primary_button(self, text: str, callback, kind: str = "primary") -> QPushButton:
+        button = QPushButton(text)
+        names = {
+            "primary": "PrimaryButton",
+            "success": "SuccessButton",
+            "warning": "WarningButton",
+            "danger": "DangerButton",
+        }
+        button.setObjectName(names.get(kind, "PrimaryButton"))
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.clicked.connect(callback)
+        return button
+
+    def _build_pages(self) -> None:
+        self.pages = []
+        page_definitions = [
+            ("Tổng quan học tập", self._page_subtitles[0], self._build_dashboard),
+            ("Dữ liệu sinh viên", self._page_subtitles[1], self._build_data_page),
+            ("Phân tích dữ liệu", self._page_subtitles[2], self._build_eda_page),
+            ("Dự đoán điểm thi cuối kỳ", self._page_subtitles[3], self._build_prediction_page),
+            ("Dự đoán nguy cơ học vụ", self._page_subtitles[4], self._build_risk_page),
+            ("Mô hình Machine Learning", self._page_subtitles[5], self._build_models_page),
+            ("Báo cáo và xuất dữ liệu", self._page_subtitles[6], self._build_reports_page),
+            ("Cấu hình ứng dụng", self._page_subtitles[7], self._build_settings_page),
+        ]
+        for title, subtitle, builder in page_definitions:
+            scroll, body, layout = self._create_page(title, subtitle)
+            builder(body, layout)
+            self.content_area.addWidget(scroll)
+            self.pages.append(scroll)
+
+    def _build_dashboard(self, body: QWidget, layout: QVBoxLayout) -> None:
+        action_row = QHBoxLayout()
+        action_row.addStretch(1)
+        action_row.addWidget(self._primary_button("Nhập dữ liệu", lambda: self._switch_page(1)))
+        action_row.addWidget(self._primary_button("Làm mới", self._update_all_status))
+        layout.addLayout(action_row)
+
+        cards = QGridLayout()
+        cards.setSpacing(12)
+        self.card_records = _MetricCard("BẢN GHI ĐÃ NẠP", "—", "Chưa có dataset", "blue")
+        self.card_missing = _MetricCard("Ô DỮ LIỆU THIẾU", "—", "Chưa có dataset", "amber")
+        self.card_absence = _MetricCard("VƯỢT NGƯỠNG NGHỈ HỌC", "—", "Ngưỡng cấu hình > 30%", "red")
+        self.card_model = _MetricCard("MÔ HÌNH DỰ ĐOÁN", "Chưa sẵn sàng", "Cần model đã huấn luyện", "violet")
+        cards.addWidget(self.card_records, 0, 0)
+        cards.addWidget(self.card_missing, 0, 1)
+        cards.addWidget(self.card_absence, 0, 2)
+        cards.addWidget(self.card_model, 0, 3)
+        for col in range(4):
+            cards.setColumnStretch(col, 1)
+        layout.addLayout(cards)
+
+        main_grid = QGridLayout()
+        main_grid.setSpacing(14)
+        chart_frame, chart_layout = self._surface("Phân bố tỷ lệ nghỉ học")
+        self.dashboard_chart_layout = chart_layout
+        self.dashboard_chart_placeholder = QLabel("Nhập dữ liệu để hiển thị phân tích.")
+        self.dashboard_chart_placeholder.setObjectName("Muted")
+        self.dashboard_chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.dashboard_chart_placeholder.setMinimumHeight(230)
+        chart_layout.addWidget(self.dashboard_chart_placeholder)
+        summary_frame, summary_layout = self._surface("Tình trạng dataset")
+        self.dashboard_summary = QLabel("Chưa có dữ liệu được nạp vào phiên làm việc.")
+        self.dashboard_summary.setWordWrap(True)
+        self.dashboard_summary.setAlignment(Qt.AlignmentFlag.AlignTop)
+        self.dashboard_summary.setStyleSheet("color:#475467;line-height:1.5;")
+        summary_layout.addWidget(self.dashboard_summary)
+        summary_layout.addStretch(1)
+        main_grid.addWidget(chart_frame, 0, 0, 1, 2)
+        main_grid.addWidget(summary_frame, 0, 2, 1, 1)
+        main_grid.setColumnStretch(0, 1)
+        main_grid.setColumnStretch(1, 1)
+        main_grid.setColumnStretch(2, 1)
+        layout.addLayout(main_grid)
+
+        notice_frame, notice_layout = self._surface("Lưu ý vận hành")
+        notice = QLabel(
+            "Kết quả dự đoán chỉ được cung cấp khi có model hợp lệ và dữ liệu đầu vào đáp ứng feature contract. "
+            "Trạng thái vượt ngưỡng nghỉ học được hiển thị riêng với điểm nguy cơ tổng hợp."
+        )
+        notice.setWordWrap(True)
+        notice.setStyleSheet("color:#475467;")
+        notice_layout.addWidget(notice)
+        layout.addWidget(notice_frame)
+
+    def _build_data_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        actions_frame, actions_layout = self._surface("Nhập dữ liệu")
+        actions_row = QHBoxLayout()
+        self.btn_import = self._primary_button("Chọn file CSV / Excel", self._handle_import)
+        self.btn_import.setMinimumHeight(40)
+        actions_row.addWidget(self.btn_import)
+        self.btn_refresh_table = QPushButton("Làm mới hiển thị")
+        self.btn_refresh_table.clicked.connect(self._refresh_data_table)
+        actions_row.addWidget(self.btn_refresh_table)
+        actions_row.addStretch(1)
+        actions_layout.addLayout(actions_row)
+        self.lbl_import_status = QLabel("Chưa chọn file dữ liệu.")
+        self.lbl_import_status.setObjectName("Muted")
+        self.lbl_import_status.setWordWrap(True)
+        actions_layout.addWidget(self.lbl_import_status)
+        self.lbl_quality_summary = QLabel("Báo cáo chất lượng sẽ xuất hiện sau khi nhập dữ liệu.")
+        self.lbl_quality_summary.setWordWrap(True)
+        self.lbl_quality_summary.setStyleSheet("background:#F8FAFC;padding:11px;border-radius:8px;color:#475467;")
+        actions_layout.addWidget(self.lbl_quality_summary)
+        layout.addWidget(actions_frame)
+
+        table_frame, table_layout = self._surface("Bản xem trước dữ liệu")
+        self.lbl_table_count = QLabel("0 bản ghi")
+        self.lbl_table_count.setObjectName("Muted")
+        table_layout.addWidget(self.lbl_table_count)
+        self.table_import = self._create_table()
+        self.table_import.setMinimumHeight(360)
+        table_layout.addWidget(self.table_import)
+        layout.addWidget(table_frame, 1)
+
+    def _build_eda_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        filters_frame, filters_layout = self._surface("Thiết lập phân tích")
+        row = QHBoxLayout()
+        self.cb_chart_type = QComboBox()
+        self.cb_chart_type.addItem("Histogram", "histogram")
+        self.cb_chart_type.addItem("Biểu đồ đếm", "count")
+        self.cb_chart_type.addItem("Boxplot theo nhóm", "boxplot")
+        self.cb_chart_type.addItem("Scatter plot", "scatter")
+        self.cb_chart_type.addItem("Correlation heatmap", "heatmap")
+        self.cb_eda_col = QComboBox()
+        self.cb_eda_category = QComboBox()
+        self.cb_eda_x = QComboBox()
+        self.cb_eda_y = QComboBox()
+        self.btn_plot = self._primary_button("Tạo biểu đồ", self._handle_plot)
+        self.btn_save_chart = QPushButton("Lưu biểu đồ")
+        self.btn_save_chart.clicked.connect(self._save_current_chart)
+        row.addWidget(QLabel("Loại biểu đồ"))
+        row.addWidget(self.cb_chart_type, 1)
+        row.addWidget(QLabel("Biến chính"))
+        row.addWidget(self.cb_eda_col, 2)
+        row.addWidget(QLabel("Nhóm"))
+        row.addWidget(self.cb_eda_category, 2)
+        row.addWidget(self.btn_plot)
+        row.addWidget(self.btn_save_chart)
+        filters_layout.addLayout(row)
+
+        scatter_row = QHBoxLayout()
+        scatter_row.addWidget(QLabel("Trục X"))
+        scatter_row.addWidget(self.cb_eda_x, 1)
+        scatter_row.addWidget(QLabel("Trục Y"))
+        scatter_row.addWidget(self.cb_eda_y, 1)
+        filters_layout.addLayout(scatter_row)
+        self.cb_chart_type.currentIndexChanged.connect(self._update_eda_controls)
+        layout.addWidget(filters_frame)
+
+        chart_frame, chart_layout = self._surface("Biểu đồ")
+        self.chart_container = QVBoxLayout()
+        self.chart_container.setSpacing(4)
+        self.chart_placeholder = QLabel("Nhập dữ liệu trước khi tạo biểu đồ.")
+        self.chart_placeholder.setObjectName("Muted")
+        self.chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.chart_placeholder.setMinimumHeight(300)
+        self.chart_container.addWidget(self.chart_placeholder)
+        chart_layout.addLayout(self.chart_container)
+        layout.addWidget(chart_frame, 1)
+
+        stats_frame, stats_layout = self._surface("Thống kê mô tả")
+        self.table_eda_stats = self._create_table()
+        self.table_eda_stats.setMaximumHeight(240)
+        stats_layout.addWidget(self.table_eda_stats)
+        layout.addWidget(stats_frame)
+        self._update_eda_controls()
+
+    def _build_prediction_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        setup_frame, setup_layout = self._surface("Thiết lập dự đoán")
+        row = QHBoxLayout()
+        self.cb_course_profile = QComboBox()
+        self.cb_course_profile.addItem("Học phần không có TX2", "no_tx2")
+        self.cb_course_profile.addItem("Học phần có TX2", "with_tx2")
+        self.btn_train_from_prediction = self._primary_button("Huấn luyện mô hình", self._handle_train_model, "warning")
+        self.btn_predict = self._primary_button("Dự đoán điểm học phần", self._handle_predict, "success")
+        row.addWidget(QLabel("Cấu hình đánh giá"))
+        row.addWidget(self.cb_course_profile, 1)
+        row.addStretch(1)
+        row.addWidget(self.btn_train_from_prediction)
+        row.addWidget(self.btn_predict)
+        setup_layout.addLayout(row)
+        self.lbl_prediction_notice = QLabel(
+            "Chọn một profile phù hợp với cấu trúc điểm của dataset. Nếu một file chứa nhiều loại học phần, cần tách file hoặc bổ sung mapping theo học phần."
+        )
+        self.lbl_prediction_notice.setWordWrap(True)
+        self.lbl_prediction_notice.setStyleSheet("color:#475467;background:#EFF6FF;border-radius:8px;padding:10px;")
+        setup_layout.addWidget(self.lbl_prediction_notice)
+        layout.addWidget(setup_frame)
+
+        result_frame, result_layout = self._surface("Kết quả dự đoán")
+        self.lbl_prediction_status = QLabel("Chưa thực hiện dự đoán.")
+        self.lbl_prediction_status.setObjectName("Muted")
+        result_layout.addWidget(self.lbl_prediction_status)
+        self.table_predict = self._create_table()
+        self.table_predict.setMinimumHeight(350)
+        result_layout.addWidget(self.table_predict)
+        layout.addWidget(result_frame, 1)
+
+    def _build_risk_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        setup_frame, setup_layout = self._surface("Đánh giá nguy cơ")
+        row = QHBoxLayout()
+        self.btn_risk = self._primary_button("Tính nguy cơ học vụ", self._handle_risk, "danger")
+        self.btn_export_risk = QPushButton("Xuất kết quả nguy cơ")
+        self.btn_export_risk.clicked.connect(lambda: self._export_dataframe("risk"))
+        row.addWidget(self.btn_risk)
+        row.addWidget(self.btn_export_risk)
+        row.addStretch(1)
+        setup_layout.addLayout(row)
+        notice = QLabel(
+            "Điểm nguy cơ là kết quả theo quy tắc cấu hình, không phải xác suất đã hiệu chuẩn. "
+            "Trạng thái nghỉ học vượt 30% được thể hiện riêng và không bị điểm khảo sát làm mất hiệu lực."
+        )
+        notice.setWordWrap(True)
+        notice.setStyleSheet("color:#7A271A;background:#FEF3F2;border-radius:8px;padding:10px;")
+        setup_layout.addWidget(notice)
+        layout.addWidget(setup_frame)
+
+        cards = QGridLayout()
+        cards.setSpacing(12)
+        self.card_risk_evaluated = _MetricCard("ĐÃ ĐÁNH GIÁ", "—", "Chưa có kết quả", "blue")
+        self.card_risk_override = _MetricCard("VƯỢT NGƯỠNG", "—", "Nghỉ học > 30%", "red")
+        self.card_risk_high = _MetricCard("NGUY CƠ CAO / RẤT CAO", "—", "Theo cấu hình risk engine", "amber")
+        cards.addWidget(self.card_risk_evaluated, 0, 0)
+        cards.addWidget(self.card_risk_override, 0, 1)
+        cards.addWidget(self.card_risk_high, 0, 2)
+        for col in range(3):
+            cards.setColumnStretch(col, 1)
+        layout.addLayout(cards)
+
+        table_frame, table_layout = self._surface("Kết quả theo bản ghi")
+        self.lbl_risk_status = QLabel("Cần dữ liệu và các trường bắt buộc hợp lệ để tính nguy cơ.")
+        self.lbl_risk_status.setObjectName("Muted")
+        self.lbl_risk_status.setWordWrap(True)
+        table_layout.addWidget(self.lbl_risk_status)
+        self.table_risk = self._create_table()
+        self.table_risk.setMinimumHeight(350)
+        table_layout.addWidget(self.table_risk)
+        layout.addWidget(table_frame, 1)
+
+    def _build_models_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        state_frame, state_layout = self._surface("Trạng thái mô hình")
+        top = QHBoxLayout()
+        self.lbl_model_page_status = QLabel("Đang kiểm tra registry…")
+        self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B45309;")
+        top.addWidget(self.lbl_model_page_status, 1)
+        self.btn_model_refresh = QPushButton("Làm mới trạng thái")
+        self.btn_model_refresh.clicked.connect(self._update_model_status)
+        top.addWidget(self.btn_model_refresh)
+        state_layout.addLayout(top)
+        self.lbl_model_details = QLabel("Chưa có metadata model.")
+        self.lbl_model_details.setWordWrap(True)
+        self.lbl_model_details.setObjectName("Muted")
+        state_layout.addWidget(self.lbl_model_details)
+        layout.addWidget(state_frame)
+
+        train_frame, train_layout = self._surface("Huấn luyện từ dữ liệu lịch sử")
+        explainer = QLabel(
+            "Cần dữ liệu lịch sử có cột actual_final_exam_score để làm target. "
+            "Mô hình chỉ được lưu khi quy trình huấn luyện và đánh giá thực sự hoàn tất."
+        )
+        explainer.setWordWrap(True)
+        explainer.setStyleSheet("color:#475467;")
+        train_layout.addWidget(explainer)
+        self.training_progress = QProgressBar()
+        self.training_progress.setRange(0, 0)
+        self.training_progress.setVisible(False)
+        train_layout.addWidget(self.training_progress)
+        train_actions = QHBoxLayout()
+        self.btn_train_model = self._primary_button("Huấn luyện model v1.0.0", self._handle_train_model, "warning")
+        self.btn_train_model.setMinimumHeight(40)
+        train_actions.addWidget(self.btn_train_model)
+        train_actions.addStretch(1)
+        train_layout.addLayout(train_actions)
+        self.lbl_training_status = QLabel("Chưa chạy huấn luyện trong phiên này.")
+        self.lbl_training_status.setWordWrap(True)
+        self.lbl_training_status.setObjectName("Muted")
+        train_layout.addWidget(self.lbl_training_status)
+        layout.addWidget(train_frame)
+
+        metrics_frame, metrics_layout = self._surface("Kết quả đánh giá gần nhất")
+        self.lbl_model_metrics = QLabel("Chưa có kết quả huấn luyện trong phiên này.")
+        self.lbl_model_metrics.setWordWrap(True)
+        self.lbl_model_metrics.setObjectName("Muted")
+        metrics_layout.addWidget(self.lbl_model_metrics)
+        layout.addWidget(metrics_frame)
+
+    def _build_reports_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        frame, frame_layout = self._surface("Xuất dữ liệu và kết quả")
+        intro = QLabel("Chọn loại dữ liệu đang có trong phiên làm việc rồi xuất ra CSV hoặc Excel.")
+        intro.setObjectName("Muted")
+        intro.setWordWrap(True)
+        frame_layout.addWidget(intro)
+        row = QHBoxLayout()
+        self.cb_report_type = QComboBox()
+        self.cb_report_type.addItem("Dataset đã nhập", "dataset")
+        self.cb_report_type.addItem("Kết quả dự đoán điểm", "prediction")
+        self.cb_report_type.addItem("Kết quả nguy cơ học vụ", "risk")
+        row.addWidget(self.cb_report_type, 1)
+        self.btn_export_report = self._primary_button("Xuất file", self._handle_export_report)
+        row.addWidget(self.btn_export_report)
+        frame_layout.addLayout(row)
+        self.lbl_report_status = QLabel("Chưa xuất báo cáo nào trong phiên này.")
+        self.lbl_report_status.setWordWrap(True)
+        self.lbl_report_status.setObjectName("Muted")
+        frame_layout.addWidget(self.lbl_report_status)
+        layout.addWidget(frame)
+
+        info_frame, info_layout = self._surface("Quy tắc xuất")
+        info = QLabel(
+            "Dữ liệu nguồn không bị sửa đổi khi xuất kết quả. Kiểm tra file đích trước khi chia sẻ vì báo cáo có thể chứa mã sinh viên hoặc thông tin học tập."
+        )
+        info.setWordWrap(True)
+        info.setStyleSheet("color:#475467;")
+        info_layout.addWidget(info)
+        layout.addWidget(info_frame)
+        layout.addStretch(1)
+
+    def _build_settings_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        frame, frame_layout = self._surface("Môi trường và đường dẫn")
+        self.settings_text = QLabel("Đang đọc cấu hình…")
+        self.settings_text.setWordWrap(True)
+        self.settings_text.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        frame_layout.addWidget(self.settings_text)
+        self.btn_settings_refresh = QPushButton("Đọc lại cấu hình")
+        self.btn_settings_refresh.clicked.connect(self._refresh_settings)
+        frame_layout.addWidget(self.btn_settings_refresh, alignment=Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(frame)
+
+        rules_frame, rules_layout = self._surface("Nguyên tắc nghiệp vụ")
+        rules = QLabel(
+            "Công thức không TX2: 0,2 × TX1 + 0,2 × giữa kỳ + 0,6 × điểm cuối kỳ dự đoán.\n"
+            "Công thức có TX2: 0,15 × TX1 + 0,15 × TX2 + 0,2 × giữa kỳ + 0,5 × điểm cuối kỳ dự đoán.\n"
+            "Trọng số nguy cơ: nghỉ học 75%, điểm số 8%, LMS 8%, tương tác 4%, đi làm thêm 2%, stress 1,5%, động lực 1,5%.\n"
+            "Tỷ lệ nghỉ học trên 30% bật trạng thái override riêng."
+        )
+        rules.setWordWrap(True)
+        rules.setStyleSheet("color:#475467;line-height:1.5;")
+        rules_layout.addWidget(rules)
+        layout.addWidget(rules_frame)
+
+    def _create_table(self) -> QTableWidget:
+        table = QTableWidget()
+        table.setAlternatingRowColors(True)
+        table.setShowGrid(False)
+        table.setWordWrap(False)
+        table.setSortingEnabled(True)
+        table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        return table
+
+    def _switch_page(self, index: int) -> None:
+        if index < 0 or index >= self.content_area.count():
             return
+        self.content_area.setCurrentIndex(index)
+        for i, button in enumerate(self.nav_buttons):
+            button.setChecked(i == index)
+        self.settings_nav_button.setChecked(index == 7)
+        self.topbar_context.setText(self._page_titles[index].upper())
+        if index == 0:
+            self._update_dashboard()
+        elif index == 2:
+            self._refresh_eda_options()
+        elif index == 5:
+            self._update_model_status()
+        elif index == 7:
+            self._refresh_settings()
 
-        if (hasattr(self.prediction_service, "is_model_ready")
-                and not self.prediction_service.is_model_ready("1.0.0")):
+    def _update_all_status(self) -> None:
+        self._update_dashboard()
+        self._update_model_status()
+        self._update_global_badges()
+
+    def _update_global_badges(self) -> None:
+        if self.current_df is None:
+            self.lbl_dataset_badge.setText("Chưa có dữ liệu")
+            self.lbl_dataset_badge.setStyleSheet("background:#F2F4F7;color:#475467;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+        else:
+            filename = Path(self.current_file_path).name if self.current_file_path else "Dataset đã nạp"
+            self.lbl_dataset_badge.setText(f"{filename} · {len(self.current_df):,} dòng")
+            self.lbl_dataset_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+        ready = self._is_model_ready()
+        if ready:
+            self.lbl_model_badge.setText("Model v1.0.0 sẵn sàng")
+            self.lbl_model_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+        else:
+            self.lbl_model_badge.setText("Model chưa sẵn sàng")
+            self.lbl_model_badge.setStyleSheet("background:#FEF3F2;color:#B42318;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
+
+    def _is_model_ready(self) -> bool:
+        try:
+            checker = getattr(self.prediction_service, "is_model_ready", None)
+            return bool(checker("1.0.0")) if callable(checker) else False
+        except Exception:
+            logging.exception("Unable to check model readiness")
+            return False
+
+    def _update_dashboard(self) -> None:
+        if self.current_df is None:
+            self.card_records.set_value("0", "Chưa có dataset", "blue")
+            self.card_missing.set_value("—", "Chưa có dataset", "amber")
+            self.card_absence.set_value("—", "Ngưỡng cấu hình > 30%", "red")
+            self.card_risk_override_value = None
+            self.dashboard_summary.setText("Chưa có dữ liệu được nạp vào phiên làm việc.")
+            self._show_dashboard_placeholder("Nhập dữ liệu để hiển thị phân tích.")
+        else:
+            df = self.current_df
+            missing_cells = int(df.isna().sum().sum())
+            if "absence_percentage" in df.columns:
+                absence = pd.to_numeric(df["absence_percentage"], errors="coerce")
+                override_count = int((absence > 30).sum())
+                self.card_absence.set_value(f"{override_count:,}", "Tỷ lệ nghỉ học > 30%", "red")
+            else:
+                override_count = 0
+                self.card_absence.set_value("—", "Không có cột absence_percentage", "amber")
+            self.card_records.set_value(f"{len(df):,}", f"{len(df.columns)} cột trong dataset", "blue")
+            self.card_missing.set_value(f"{missing_cells:,}", "Ô thiếu trong dữ liệu đang nạp", "amber" if missing_cells else "green")
+            path_text = Path(self.current_file_path).name if self.current_file_path else "Dataset hiện tại"
+            summary_lines = [
+                f"Nguồn dữ liệu: {path_text}",
+                f"Số bản ghi: {len(df):,}",
+                f"Số cột: {len(df.columns):,}",
+                f"Ô dữ liệu thiếu: {missing_cells:,}",
+                f"Bản ghi có tỷ lệ nghỉ học trên 30%: {override_count:,}",
+            ]
+            if self.prediction_df is not None:
+                summary_lines.append(f"Bản ghi đã dự đoán điểm: {len(self.prediction_df):,}")
+            if self.risk_df is not None:
+                summary_lines.append(f"Bản ghi có kết quả nguy cơ: {len(self.risk_df):,}")
+            self.dashboard_summary.setText("\n".join(summary_lines))
+            self._render_dashboard_chart()
+        ready = self._is_model_ready()
+        self.card_model.set_value(
+            "Sẵn sàng" if ready else "Chưa sẵn sàng",
+            "Artifact và registry hợp lệ" if ready else "Cần huấn luyện và lưu model hợp lệ",
+            "green" if ready else "violet",
+        )
+        self._update_global_badges()
+
+    def _show_dashboard_placeholder(self, message: str) -> None:
+        self._clear_layout(self.dashboard_chart_layout)
+        label = QLabel(message)
+        label.setObjectName("Muted")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setMinimumHeight(220)
+        self.dashboard_chart_layout.addWidget(label)
+
+    def _render_dashboard_chart(self) -> None:
+        if self.current_df is None or "absence_percentage" not in self.current_df.columns:
+            self._show_dashboard_placeholder("Dataset chưa có cột tỷ lệ nghỉ học.")
+            return
+        try:
+            figure = self.chart_service.dist_plots.plot_histogram(self.current_df, "absence_percentage")
+            figure.set_size_inches(7.5, 3.6, forward=True)
+            self._clear_layout(self.dashboard_chart_layout)
+            canvas = FigureCanvas(figure)
+            self.dashboard_chart_layout.addWidget(canvas)
+        except Exception as exc:
+            logging.exception("Dashboard chart failed")
+            self._show_dashboard_placeholder(f"Chưa thể tạo biểu đồ: {exc}")
+
+    def _handle_import(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn dữ liệu sinh viên",
+            "",
+            "Dữ liệu CSV/Excel (*.csv *.xlsx *.xls);;CSV (*.csv);;Excel (*.xlsx *.xls)",
+        )
+        if not file_path:
+            return
+        self.btn_import.setEnabled(False)
+        self.lbl_import_status.setText("Đang đọc và kiểm tra dữ liệu…")
+        QApplication.processEvents()
+        try:
+            from haui_student_prediction.config.course_profiles import DEFAULT_COURSES_WITH_TX2
+
+            required_columns = ["student_id", "absence_percentage", "tx1_score", "midterm_score"]
+            result = self.dataset_service.import_dataset(
+                file_path,
+                required_columns,
+                list(DEFAULT_COURSES_WITH_TX2),
+            )
+            if not result.is_success or result.data is None:
+                error_lines = []
+                if result.missing_columns:
+                    error_lines.append("Thiếu cột bắt buộc: " + ", ".join(result.missing_columns))
+                if result.duplicate_indices:
+                    error_lines.append(f"Bản ghi trùng: {len(result.duplicate_indices)}")
+                if result.errors:
+                    error_lines.append("Chi tiết lỗi:")
+                    for error in result.errors[:8]:
+                        column = error.get("column", "")
+                        message = error.get("error", "Dữ liệu không hợp lệ")
+                        rows = error.get("rows", [])
+                        row_text = f"; dòng: {rows[:8]}" if rows else ""
+                        error_lines.append(f"• {column}: {message}{row_text}")
+                detail = "\n".join(error_lines) if error_lines else "File không vượt qua kiểm tra dữ liệu."
+                self.lbl_import_status.setText("Nhập dữ liệu thất bại. Dữ liệu hiện tại được giữ nguyên.")
+                QMessageBox.warning(self, "Không thể nhập dữ liệu", detail)
+                return
+
+            self.current_df = result.data.copy(deep=True)
+            self.current_file_path = file_path
+            self.prediction_df = None
+            self.risk_df = None
+            warnings = getattr(result, "warnings", []) or []
+            warning_text = f" Có {len(warnings)} cảnh báo cần xem lại." if warnings else ""
+            self.lbl_import_status.setText(
+                f"Đã nhập {len(self.current_df):,} bản ghi từ {Path(file_path).name}.{warning_text}"
+            )
+            self.lbl_quality_summary.setText(self._build_quality_summary(self.current_df, warnings))
+            self.lbl_quality_summary.setStyleSheet(
+                "background:#ECFDF3;color:#027A48;padding:11px;border-radius:8px;" if not warnings
+                else "background:#FFFAEB;color:#B54708;padding:11px;border-radius:8px;"
+            )
+            self._refresh_data_table()
+            self._refresh_eda_options()
+            self._update_all_status()
+            self._refresh_report_options()
+            self._refresh_model_page_info()
+            if warnings:
+                QMessageBox.information(
+                    self,
+                    "Đã nhập dữ liệu kèm cảnh báo",
+                    "Dữ liệu đã được nạp nhưng cần xem các cảnh báo thang điểm hoặc chất lượng trước khi phân tích tiếp.",
+                )
+        except Exception as exc:
+            logging.exception("Dataset import failed")
+            self.lbl_import_status.setText("Nhập dữ liệu thất bại. Dữ liệu hiện tại được giữ nguyên.")
+            QMessageBox.critical(self, "Lỗi nhập dữ liệu", self._user_error(exc))
+        finally:
+            self.btn_import.setEnabled(True)
+
+    def _build_quality_summary(self, dataframe: pd.DataFrame, warnings: list[Any]) -> str:
+        missing_cells = int(dataframe.isna().sum().sum())
+        missing_columns = int(dataframe.isna().any(axis=0).sum())
+        lines = [
+            f"Bản ghi: {len(dataframe):,} · Cột: {len(dataframe.columns):,}",
+            f"Ô dữ liệu thiếu: {missing_cells:,} · Cột có giá trị thiếu: {missing_columns:,}",
+            f"Cảnh báo validator: {len(warnings):,}",
+        ]
+        if "absence_percentage" in dataframe.columns:
+            values = pd.to_numeric(dataframe["absence_percentage"], errors="coerce")
+            lines.append(f"Bản ghi nghỉ học trên 30%: {int((values > 30).sum()):,}")
+        return "\n".join(lines)
+
+    def _refresh_data_table(self) -> None:
+        if self.current_df is None:
+            self.table_import.clear()
+            self.table_import.setRowCount(0)
+            self.table_import.setColumnCount(0)
+            self.lbl_table_count.setText("0 bản ghi")
+            return
+        self._populate_table(self.table_import, self.current_df)
+        displayed = min(len(self.current_df), 1000)
+        self.lbl_table_count.setText(
+            f"Hiển thị {displayed:,}/{len(self.current_df):,} bản ghi để giữ giao diện phản hồi tốt."
+        )
+
+    def _populate_table(self, table: QTableWidget, dataframe: pd.DataFrame, max_rows: int = 1000) -> None:
+        table.setSortingEnabled(False)
+        preview = dataframe.head(max_rows).copy()
+        table.clear()
+        table.setRowCount(len(preview))
+        table.setColumnCount(len(preview.columns))
+        table.setHorizontalHeaderLabels([str(column) for column in preview.columns])
+        for row_index in range(len(preview)):
+            for column_index, column in enumerate(preview.columns):
+                value = preview.iat[row_index, column_index]
+                if pd.isna(value):
+                    text = "Chưa có dữ liệu"
+                elif isinstance(value, (float, np.floating)):
+                    text = f"{float(value):.3f}" if np.isfinite(value) else "Không hợp lệ"
+                else:
+                    text = str(value)
+                item = QTableWidgetItem(text)
+                item.setToolTip(text)
+                table.setItem(row_index, column_index, item)
+        table.resizeColumnsToContents()
+        table.horizontalHeader().setStretchLastSection(True)
+        table.setSortingEnabled(True)
+
+    def _refresh_eda_options(self) -> None:
+        dataframe = self.current_df
+        selectors = [self.cb_eda_col, self.cb_eda_category, self.cb_eda_x, self.cb_eda_y]
+        for selector in selectors:
+            selector.blockSignals(True)
+            selector.clear()
+        if dataframe is not None:
+            excluded = {"student_id", "full_name"}
+            numeric_columns = [
+                str(column)
+                for column in dataframe.select_dtypes(include="number").columns
+                if str(column) not in excluded and dataframe[column].nunique(dropna=True) > 1
+            ]
+            categorical_columns = [
+                str(column)
+                for column in dataframe.columns
+                if str(column) not in excluded
+                and (pd.api.types.is_object_dtype(dataframe[column]) or pd.api.types.is_bool_dtype(dataframe[column]) or pd.api.types.is_categorical_dtype(dataframe[column]))
+                and dataframe[column].nunique(dropna=True) > 1
+            ]
+            self.cb_eda_col.addItems(numeric_columns + categorical_columns)
+            self.cb_eda_category.addItems(categorical_columns)
+            self.cb_eda_x.addItems(numeric_columns)
+            self.cb_eda_y.addItems(numeric_columns)
+            target_candidates = [column for column in numeric_columns if column == "actual_final_exam_score"]
+            if target_candidates:
+                self.cb_eda_y.setCurrentText(target_candidates[0])
+        for selector in selectors:
+            selector.blockSignals(False)
+        self._update_eda_controls()
+        self._refresh_eda_summary()
+
+    def _update_eda_controls(self) -> None:
+        if not hasattr(self, "cb_chart_type"):
+            return
+        kind = self.cb_chart_type.currentData()
+        self.cb_eda_category.setEnabled(kind == "boxplot")
+        self.cb_eda_x.setEnabled(kind == "scatter")
+        self.cb_eda_y.setEnabled(kind == "scatter")
+        self.cb_eda_col.setEnabled(kind in {"histogram", "count", "boxplot"})
+        if kind == "count":
+            self.btn_plot.setText("Tạo biểu đồ đếm")
+        elif kind == "boxplot":
+            self.btn_plot.setText("Tạo boxplot")
+        elif kind == "scatter":
+            self.btn_plot.setText("Tạo scatter")
+        elif kind == "heatmap":
+            self.btn_plot.setText("Tạo heatmap")
+        else:
+            self.btn_plot.setText("Tạo histogram")
+
+    def _handle_plot(self) -> None:
+        if self.current_df is None or self.current_df.empty:
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập một dataset hợp lệ trước khi tạo biểu đồ.")
+            return
+        kind = self.cb_chart_type.currentData()
+        figure = None
+        try:
+            if kind == "histogram":
+                column = self.cb_eda_col.currentText()
+                if not column:
+                    raise ValueError("Chọn một biến số để tạo histogram.")
+                figure = self.chart_service.dist_plots.plot_histogram(self.current_df, column)
+            elif kind == "count":
+                column = self.cb_eda_col.currentText()
+                if not column:
+                    raise ValueError("Chọn một biến để tạo biểu đồ đếm.")
+                figure = self.chart_service.dist_plots.plot_count(self.current_df, column)
+            elif kind == "boxplot":
+                category = self.cb_eda_category.currentText()
+                numeric = self.cb_eda_col.currentText()
+                if not category or not numeric:
+                    raise ValueError("Chọn biến số và biến nhóm để tạo boxplot.")
+                figure = self.chart_service.relationship_plots.plot_boxplot(self.current_df, category, numeric)
+            elif kind == "scatter":
+                x_column = self.cb_eda_x.currentText()
+                y_column = self.cb_eda_y.currentText()
+                if not x_column or not y_column:
+                    raise ValueError("Chọn đủ biến X và biến Y.")
+                if x_column == y_column:
+                    raise ValueError("Biến X và Y phải khác nhau.")
+                figure = self.chart_service.relationship_plots.plot_scatter(self.current_df, x_column, y_column)
+            elif kind == "heatmap":
+                matrix = self.chart_service.statistics.get_correlation_matrix(self.current_df)
+                if matrix.empty:
+                    raise ValueError("Dataset không có đủ biến số để tạo heatmap tương quan.")
+                import matplotlib.pyplot as plt
+                import seaborn as sns
+
+                figure, axis = plt.subplots(figsize=(9, 6))
+                sns.heatmap(matrix, annot=matrix.shape[0] <= 12, cmap="Blues", vmin=-1, vmax=1, center=0, ax=axis)
+                axis.set_title("Ma trận tương quan")
+                figure.tight_layout()
+            else:
+                raise ValueError("Loại biểu đồ không được hỗ trợ.")
+            self._display_chart(figure)
+        except Exception as exc:
+            logging.exception("EDA plot generation failed")
+            QMessageBox.warning(self, "Không thể tạo biểu đồ", self._user_error(exc))
+
+    def _display_chart(self, figure) -> None:
+        self._clear_layout(self.chart_container)
+        figure.tight_layout()
+        canvas = FigureCanvas(figure)
+        toolbar = NavigationToolbar(canvas, self)
+        self.chart_container.addWidget(toolbar)
+        self.chart_container.addWidget(canvas, 1)
+        self._current_figure = figure
+
+    def _save_current_chart(self) -> None:
+        figure = getattr(self, "_current_figure", None)
+        if figure is None:
+            QMessageBox.information(self, "Chưa có biểu đồ", "Hãy tạo biểu đồ trước khi lưu.")
+            return
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Lưu biểu đồ",
+            "eda_chart.png",
+            "PNG (*.png);;SVG (*.svg);;PDF (*.pdf)",
+        )
+        if not file_path:
+            return
+        suffix = Path(file_path).suffix.lower()
+        if not suffix:
+            extension = "svg" if "SVG" in selected_filter else "pdf" if "PDF" in selected_filter else "png"
+            file_path = f"{file_path}.{extension}"
+        try:
+            figure.savefig(file_path, dpi=160, bbox_inches="tight")
+            QMessageBox.information(self, "Đã lưu biểu đồ", f"Biểu đồ đã được lưu tại:\n{file_path}")
+        except Exception as exc:
+            logging.exception("Chart export failed")
+            QMessageBox.critical(self, "Lỗi lưu biểu đồ", self._user_error(exc))
+
+    def _refresh_eda_summary(self) -> None:
+        if self.current_df is None:
+            self.table_eda_stats.clear()
+            self.table_eda_stats.setRowCount(0)
+            self.table_eda_stats.setColumnCount(0)
+            return
+        try:
+            summary = self.chart_service.statistics.get_numeric_summary(self.current_df)
+            records = []
+            for column, values in summary.items():
+                if column in {"student_id", "full_name"}:
+                    continue
+                if not isinstance(values, dict):
+                    continue
+                for metric, value in values.items():
+                    records.append({"Biến": column, "Thống kê": metric, "Giá trị": value})
+            summary_df = pd.DataFrame(records)
+            self._populate_table(self.table_eda_stats, summary_df, max_rows=300)
+        except Exception as exc:
+            logging.exception("EDA summary failed")
+            self.table_eda_stats.clear()
+            self.table_eda_stats.setRowCount(1)
+            self.table_eda_stats.setColumnCount(1)
+            self.table_eda_stats.setHorizontalHeaderLabels(["Trạng thái"])
+            self.table_eda_stats.setItem(0, 0, QTableWidgetItem(self._user_error(exc)))
+
+    def _handle_train_model(self) -> None:
+        if self._training_worker is not None and self._training_worker.isRunning():
+            QMessageBox.information(self, "Đang huấn luyện", "Một tác vụ huấn luyện đang chạy.")
+            return
+        if self.current_df is None or self.current_df.empty:
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dữ liệu lịch sử trước khi huấn luyện.")
+            return
+        if "actual_final_exam_score" not in self.current_df.columns:
             QMessageBox.warning(
                 self,
-                "Chưa sẵn sàng dự đoán",
-                "Mô hình ML (v1.0.0) chưa được huấn luyện hoặc "
-                "artifact chưa tồn tại.\n"
-                "Vui lòng huấn luyện mô hình trước.",
+                "Thiếu nhãn huấn luyện",
+                "Dataset chưa có cột actual_final_exam_score. Cần điểm thi cuối kỳ thực tế để huấn luyện model. Không thể huấn luyện một mô hình dự đoán thật từ dữ liệu không có nhãn.",
             )
             return
+        target = pd.to_numeric(self.current_df["actual_final_exam_score"], errors="coerce")
+        valid_rows = int((target.notna() & np.isfinite(target.astype(float))).sum())
+        if valid_rows < 6:
+            QMessageBox.warning(
+                self,
+                "Dữ liệu huấn luyện chưa đủ",
+                f"Có {valid_rows} bản ghi với điểm thi cuối kỳ hợp lệ. Cần tối thiểu 6 bản ghi để chạy kiểm thử huấn luyện sơ bộ.",
+            )
+            return
+        self.btn_train_model.setEnabled(False)
+        self.btn_train_from_prediction.setEnabled(False)
+        self.training_progress.setVisible(True)
+        self.lbl_training_status.setText("Đang kiểm tra dữ liệu, chia tập và huấn luyện…")
+        self._training_worker = _TrainingWorker(self.current_df, self)
+        self._training_worker.succeeded.connect(self._on_training_succeeded)
+        self._training_worker.failed.connect(self._on_training_failed)
+        self._training_worker.finished.connect(self._on_training_finished)
+        self._training_worker.start()
 
+    def _on_training_succeeded(self, result: dict[str, Any]) -> None:
+        metrics = result["metrics"]
+        mae = self._format_metric(metrics.mae)
+        rmse = self._format_metric(metrics.rmse)
+        r2 = self._format_metric(metrics.r2)
+        self.lbl_training_status.setText(
+            f"Đã lưu model {result['version']}. Train: {result['train_rows']:,} dòng; test: {result['test_rows']:,} dòng."
+        )
+        self.lbl_model_metrics.setText(
+            f"MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
+            f"Số đặc trưng: {result['feature_count']}\n"
+            f"Dataset fingerprint: {result['dataset_hash']}\n"
+            f"Features: {', '.join(result['features'])}"
+        )
+        self._update_all_status()
+        self._refresh_model_page_info()
+        QMessageBox.information(
+            self,
+            "Huấn luyện hoàn tất",
+            f"Model {result['version']} đã được lưu và xác minh trong registry.\n\nMAE: {mae}\nRMSE: {rmse}\nR²: {r2}",
+        )
+
+    def _on_training_failed(self, message: str) -> None:
+        self.lbl_training_status.setText("Huấn luyện chưa hoàn tất. Xem thông báo để biết nguyên nhân.")
+        QMessageBox.critical(self, "Huấn luyện thất bại", message)
+
+    def _on_training_finished(self) -> None:
+        self.btn_train_model.setEnabled(True)
+        self.btn_train_from_prediction.setEnabled(True)
+        self.training_progress.setVisible(False)
+        self._training_worker = None
+        self._update_model_status()
+
+    def _handle_predict(self) -> None:
+        if self.current_df is None or self.current_df.empty:
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dataset trước khi dự đoán.")
+            return
+        if not self._is_model_ready():
+            self._update_model_status()
+            QMessageBox.warning(
+                self,
+                "Mô hình chưa sẵn sàng",
+                "Chưa tìm thấy model đã huấn luyện và artifact hợp lệ. Mở trang Mô hình ML để kiểm tra hoặc huấn luyện từ dữ liệu lịch sử có điểm thi cuối kỳ thực tế.",
+            )
+            return
+        profile_id = self.cb_course_profile.currentData()
         try:
-            profile_idx = self.cb_course_profile.currentIndex()
-            profile_id = "no_tx2" if profile_idx == 0 else "with_tx2"
-
-            result_df = self.prediction_service.predict_student_results(
-                self.current_df,
+            self.btn_predict.setEnabled(False)
+            self.lbl_prediction_status.setText("Đang dự đoán…")
+            QApplication.processEvents()
+            results = self.prediction_service.predict_student_results(
+                self.current_df.copy(deep=True),
                 model_version="1.0.0",
                 course_profile_id=profile_id,
             )
-            self.current_df = result_df
+            self.prediction_df = results.copy(deep=True)
+            self._populate_table(self.table_predict, self.prediction_df)
+            self.lbl_prediction_status.setText(
+                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng model v1.0.0. Kết quả là ước lượng, không phải điểm cuối kỳ thực tế."
+            )
+            self._refresh_report_options()
+            self._update_dashboard()
+            QMessageBox.information(self, "Dự đoán hoàn tất", f"Đã tạo kết quả dự đoán cho {len(self.prediction_df):,} bản ghi.")
+        except Exception as exc:
+            logging.exception("Score prediction failed")
+            self.lbl_prediction_status.setText("Dự đoán thất bại. Kiểm tra feature contract và dữ liệu đầu vào.")
+            QMessageBox.critical(self, "Không thể dự đoán", self._user_error(exc))
+        finally:
+            self.btn_predict.setEnabled(True)
 
-            disp_cols = [
-                "student_id", "tx1_score", "midterm_score",
-                "predicted_final_exam_score", "predicted_course_score",
-            ]
-            if profile_id == "with_tx2":
-                disp_cols.insert(2, "tx2_score")
-
-            avail_cols = [c for c in disp_cols if c in result_df.columns]
-            self._populate_table(self.table_predict, result_df[avail_cols])
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi Dự đoán", str(e))
-
-    def _build_risk_page(self):
-        layout = QVBoxLayout(self.page_risk)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.addWidget(self._create_header("Dự đoán nguy cơ học vụ"))
-
-        control_layout = QHBoxLayout()
-        btn_risk = QPushButton("Phân tích Nguy cơ toàn khóa")
-        btn_risk.setStyleSheet(
-            "background-color: #DC3545; color: white; "
-            "padding: 5px 15px; border-radius: 3px; font-weight: bold;"
+    def _handle_risk(self) -> None:
+        source = self.prediction_df
+        if source is None and self.current_df is not None and "predicted_course_score" in self.current_df.columns:
+            source = self.current_df
+        if source is None or source.empty:
+            QMessageBox.warning(
+                self,
+                "Chưa có điểm học phần dự kiến",
+                "Hãy hoàn thành dự đoán điểm học phần trước khi tính nguy cơ học vụ.",
+            )
+            return
+        rows = []
+        errors = 0
+        for row_index, row in source.iterrows():
+            student_id = str(row.get("student_id", f"Bản ghi {row_index + 1}"))
+            try:
+                result = self.risk_service.evaluate_student_risk(row)
+                is_override = bool(result.is_override)
+                category = self._risk_label(result.risk_category)
+                rows.append(
+                    {
+                        "student_id": student_id,
+                        "absence_status": "HOC_LAI" if is_override else self._absence_label(result.absence_status),
+                        "weighted_score": round(float(result.weighted_score), 2),
+                        "risk_category": category,
+                        "override_triggered": is_override,
+                        "evaluation_status": "Đã đánh giá",
+                    }
+                )
+            except Exception as exc:
+                errors += 1
+                rows.append(
+                    {
+                        "student_id": student_id,
+                        "absence_status": "Chưa xác định",
+                        "weighted_score": np.nan,
+                        "risk_category": "Chưa đủ dữ liệu",
+                        "override_triggered": False,
+                        "evaluation_status": self._user_error(exc),
+                    }
+                )
+        self.risk_df = pd.DataFrame(rows)
+        self._populate_table(self.table_risk, self.risk_df)
+        valid_scores = pd.to_numeric(self.risk_df["weighted_score"], errors="coerce")
+        valid = valid_scores.notna() & np.isfinite(valid_scores.astype(float))
+        overrides = int(self.risk_df.loc[valid, "override_triggered"].astype(bool).sum()) if valid.any() else 0
+        high_categories = {"Cao", "Rất cao"}
+        high_count = int(self.risk_df.loc[valid, "risk_category"].isin(high_categories).sum()) if valid.any() else 0
+        self.card_risk_evaluated.set_value(f"{int(valid.sum()):,}", f"Tổng bản ghi: {len(self.risk_df):,}", "green")
+        self.card_risk_override.set_value(f"{overrides:,}", "Trạng thái HOC_LAI", "red")
+        self.card_risk_high.set_value(f"{high_count:,}", "Nguy cơ cao hoặc rất cao", "amber")
+        self.lbl_risk_status.setText(
+            f"Đã đánh giá {int(valid.sum()):,}/{len(self.risk_df):,} bản ghi."
+            + (f" {errors:,} bản ghi chưa đủ dữ liệu hoặc gặp lỗi; xem cột evaluation_status." if errors else "")
         )
-        btn_risk.clicked.connect(self._handle_risk)
-        control_layout.addWidget(btn_risk)
-        control_layout.addStretch()
-        layout.addLayout(control_layout)
+        self._refresh_report_options()
+        self._update_dashboard()
 
-        self.table_risk = QTableWidget()
-        self.table_risk.setStyleSheet("background-color: white; border: 1px solid #DEE2E6;")
-        layout.addWidget(self.table_risk)
+    def _update_model_status(self) -> None:
+        ready = self._is_model_ready()
+        if hasattr(self, "lbl_model_page_status"):
+            if ready:
+                self.lbl_model_page_status.setText("Model v1.0.0 đã sẵn sàng")
+                self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#027A48;")
+                self.lbl_model_details.setText("Registry xác nhận có metadata và artifact của model v1.0.0.")
+            else:
+                self.lbl_model_page_status.setText("Chưa có model dùng được")
+                self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B42318;")
+                self.lbl_model_details.setText(
+                    "Không tìm thấy model được đăng ký đầy đủ hoặc artifact không tồn tại. "
+                    "Cần dữ liệu lịch sử có actual_final_exam_score để huấn luyện."
+                )
+        if hasattr(self, "card_model"):
+            self.card_model.set_value(
+                "Sẵn sàng" if ready else "Chưa sẵn sàng",
+                "Artifact và registry hợp lệ" if ready else "Cần huấn luyện và lưu model hợp lệ",
+                "green" if ready else "violet",
+            )
+        self._update_global_badges()
 
-    def _handle_risk(self):
+    def _refresh_model_page_info(self) -> None:
+        self._update_model_status()
         if self.current_df is None:
-            QMessageBox.warning(
-                self, "Cảnh báo",
-                "Vui lòng thực hiện Dự đoán Điểm trước khi tính Nguy cơ.",
-            )
             return
-
-        if 'predicted_course_score' not in self.current_df.columns:
-            QMessageBox.warning(
-                self, "Cảnh báo",
-                "Vui lòng thực hiện Dự đoán Điểm cuối kỳ ở tab trước "
-                "để có điểm học phần.",
+        if "actual_final_exam_score" not in self.current_df.columns:
+            self.lbl_training_status.setText("Dataset hiện tại không có nhãn actual_final_exam_score.")
+        else:
+            target = pd.to_numeric(self.current_df["actual_final_exam_score"], errors="coerce")
+            valid = target.notna() & np.isfinite(target.astype(float))
+            self.lbl_training_status.setText(
+                f"Dataset có {int(valid.sum()):,} bản ghi với target điểm thi cuối kỳ hợp lệ trên tổng {len(self.current_df):,} bản ghi."
             )
-            return
 
+    def _refresh_settings(self) -> None:
         try:
-            records = []
-            for _, row in self.current_df.iterrows():
-                res = self.risk_service.evaluate_student_risk(row)
-                records.append({
-                    "student_id": row.get("student_id", "N/A"),
-                    "absence_status": res.absence_status,
-                    "weighted_score": round(res.weighted_score, 2),
-                    "risk_category": res.risk_category,
-                    "is_override": "Vượt ngưỡng 30%" if res.is_override else "Bình thường"
-                })
+            from haui_student_prediction.app_config import load_config
 
-            risk_df = pd.DataFrame(records)
-            self._populate_table(self.table_risk, risk_df)
-        except Exception as e:
-            QMessageBox.critical(self, "Lỗi tính toán", str(e))
+            config = load_config()
+            entries = [
+                ("Môi trường", config.env),
+                ("Dữ liệu gốc", config.data_raw_dir),
+                ("Dữ liệu đã xử lý", config.data_processed_dir),
+                ("Model registry", config.model_registry_path),
+                ("Thư mục artifact", config.model_artifacts_dir),
+                ("Thư mục báo cáo", config.report_output_dir),
+            ]
+            self.settings_text.setText("\n".join(f"{label}: {value}" for label, value in entries))
+        except Exception as exc:
+            logging.exception("Could not load application settings")
+            self.settings_text.setText(f"Không thể đọc cấu hình ứng dụng: {self._user_error(exc)}")
 
-    def _populate_table(self, table_widget, df):
-        table_widget.clear()
-        table_widget.setRowCount(df.shape[0])
-        table_widget.setColumnCount(df.shape[1])
-        table_widget.setHorizontalHeaderLabels(df.columns.astype(str))
+    def _refresh_report_options(self) -> None:
+        if not hasattr(self, "cb_report_type"):
+            return
+        current = self.cb_report_type.currentData()
+        for index in range(self.cb_report_type.count() - 1, -1, -1):
+            key = self.cb_report_type.itemData(index)
+            available = (
+                (key == "dataset" and self.current_df is not None)
+                or (key == "prediction" and self.prediction_df is not None)
+                or (key == "risk" and self.risk_df is not None)
+            )
+            self.cb_report_type.setItemText(index, {
+                "dataset": "Dataset đã nhập",
+                "prediction": "Kết quả dự đoán điểm",
+                "risk": "Kết quả nguy cơ học vụ",
+            }.get(key, str(key)))
+            model = self.cb_report_type.model()
+            item = model.item(index) if hasattr(model, "item") else None
+            if item is not None:
+                item.setEnabled(available)
+        if current is not None:
+            self.cb_report_type.setCurrentIndex(max(0, self.cb_report_type.findData(current)))
 
-        for i in range(df.shape[0]):
-            for j in range(df.shape[1]):
-                val = str(df.iat[i, j]) if pd.notna(df.iat[i, j]) else ""
-                table_widget.setItem(i, j, QTableWidgetItem(val))
+    def _get_report_dataframe(self, report_type: str) -> pd.DataFrame:
+        mapping = {
+            "dataset": self.current_df,
+            "prediction": self.prediction_df,
+            "risk": self.risk_df,
+        }
+        dataframe = mapping.get(report_type)
+        if dataframe is None or dataframe.empty:
+            raise ValueError("Loại báo cáo này chưa có dữ liệu trong phiên làm việc.")
+        return dataframe.copy(deep=True)
 
-        header = table_widget.horizontalHeader()
-        if header is not None:
-            header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+    def _handle_export_report(self) -> None:
+        report_type = self.cb_report_type.currentData()
+        self._export_dataframe(str(report_type))
+
+    def _export_dataframe(self, report_type: str) -> None:
+        try:
+            dataframe = self._get_report_dataframe(report_type)
+        except Exception as exc:
+            QMessageBox.information(self, "Chưa có dữ liệu để xuất", self._user_error(exc))
+            return
+        default_name = {
+            "dataset": "haui_dataset_cleaned.xlsx",
+            "prediction": "haui_score_predictions.xlsx",
+            "risk": "haui_academic_risk.xlsx",
+        }.get(report_type, "haui_report.xlsx")
+        file_path, selected_filter = QFileDialog.getSaveFileName(
+            self,
+            "Xuất dữ liệu",
+            default_name,
+            "Excel (*.xlsx);;CSV (*.csv)",
+        )
+        if not file_path:
+            return
+        suffix = Path(file_path).suffix.lower()
+        if not suffix:
+            suffix = ".csv" if "CSV" in selected_filter else ".xlsx"
+            file_path = f"{file_path}{suffix}"
+        try:
+            if suffix == ".csv":
+                dataframe.to_csv(file_path, index=False, encoding="utf-8-sig")
+            elif suffix in {".xlsx", ".xls"}:
+                dataframe.to_excel(file_path, index=False)
+            else:
+                raise ValueError("Định dạng xuất không được hỗ trợ. Hãy dùng .csv hoặc .xlsx.")
+            self.lbl_report_status.setText(f"Đã xuất {len(dataframe):,} bản ghi: {file_path}")
+            QMessageBox.information(self, "Xuất dữ liệu thành công", f"Đã lưu file tại:\n{file_path}")
+        except Exception as exc:
+            logging.exception("Report export failed")
+            QMessageBox.critical(self, "Lỗi xuất dữ liệu", self._user_error(exc))
+
+    def _risk_label(self, category: str) -> str:
+        labels = {
+            "Very low": "Rất thấp",
+            "Low": "Thấp",
+            "Medium": "Trung bình",
+            "High": "Cao",
+            "Very high": "Rất cao",
+            "very low": "Rất thấp",
+            "low": "Thấp",
+            "medium": "Trung bình",
+            "high": "Cao",
+            "very high": "Rất cao",
+        }
+        return labels.get(str(category), str(category))
+
+    def _absence_label(self, status: str) -> str:
+        labels = {
+            "REPEAT_REQUIRED": "Vượt ngưỡng nghỉ học",
+            "high": "Nguy cơ cao",
+            "medium": "Nguy cơ trung bình",
+            "low": "Nguy cơ thấp",
+            "very low": "Nguy cơ rất thấp",
+        }
+        return labels.get(str(status), str(status))
+
+    def _format_metric(self, value: Any) -> str:
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return "N/A"
+        return f"{number:.4f}" if np.isfinite(number) else "N/A"
+
+    def _clear_layout(self, layout: QVBoxLayout | QHBoxLayout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            child_layout = item.layout()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+            elif child_layout is not None:
+                self._clear_layout(child_layout)
+
+    def _user_error(self, exc: Exception) -> str:
+        message = str(exc).strip()
+        return message if message else exc.__class__.__name__
+
+    def closeEvent(self, event) -> None:
+        worker = self._training_worker
+        if worker is not None and worker.isRunning():
+            QMessageBox.warning(
+                self,
+                "Đang huấn luyện",
+                "Hãy đợi tác vụ huấn luyện kết thúc trước khi đóng ứng dụng.",
+            )
+            event.ignore()
+            return
+        super().closeEvent(event)

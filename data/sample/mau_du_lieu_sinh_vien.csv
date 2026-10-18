@@ -1,0 +1,11 @@
+student_id,full_name,date_of_birth,birth_year,hometown,major,course_id,semester,absence_percentage,lms_learning_percentage,tx1_score,tx2_score,midterm_score,actual_final_exam_score,interaction_score,stress_score,motivation_score,works_part_time,snapshot_date
+SV001,Nguyen Van A,2002-05-15,2002,Hanoi,IT,IT101,2023-1,5.0,45.0,7.5,8.0,7.0,8.0,4.0,2.0,4.0,False,2023-10-01
+SV002,Tran Thi B,2001-08-20,2001,Hai Phong,IT,IT101,2023-1,12.0,30.0,6.0,6.5,6.5,6.0,3.0,3.0,3.0,True,2023-10-01
+SV003,Le Van C,2003-01-10,2003,Nam Dinh,IT,IT101,2023-1,25.0,15.0,5.0,5.5,5.0,4.5,2.0,4.0,2.0,False,2023-10-01
+SV004,Pham Thi D,2002-11-05,2002,Thai Binh,IT,IT101,2023-1,35.0,10.0,4.0,4.5,4.0,3.0,1.0,5.0,1.0,True,2023-10-01
+SV005,Hoang Van E,2001-03-22,2001,Hanoi,IT,IT101,2023-1,2.0,60.0,8.5,9.0,8.0,8.5,5.0,1.0,5.0,False,2023-10-01
+SV006,Nguyen Thi F,2002-07-18,2002,Hai Duong,IT,IT101,2023-1,8.0,35.0,7.0,7.5,7.0,7.0,4.0,2.0,4.0,False,2023-10-01
+SV007,Tran Van G,2003-09-30,2003,Hanoi,IT,IT101,2023-1,18.0,20.0,6.0,6.0,6.0,5.5,3.0,3.0,3.0,True,2023-10-01
+SV008,Le Thi H,2001-12-12,2001,Hai Phong,IT,IT101,2023-1,40.0,5.0,3.0,3.5,3.0,2.0,1.0,5.0,1.0,False,2023-10-01
+SV009,Pham Van I,2002-04-25,2002,Nam Dinh,IT,IT101,2023-1,0.0,80.0,9.0,9.5,9.0,9.0,5.0,1.0,5.0,False,2023-10-01
+SV010,Hoang Thi K,2003-06-08,2003,Thai Binh,IT,IT101,2023-1,15.0,25.0,6.5,7.0,6.5,6.0,3.0,3.0,3.0,True,2023-10-01
