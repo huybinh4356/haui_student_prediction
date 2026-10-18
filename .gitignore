@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+ENV/
+
+# Project Data (Mandatory Rule: Never commit real student data)
+data/raw/*
+data/staging/*
+data/processed/*
+!data/sample/
+!data/raw/.gitkeep
+!data/staging/.gitkeep
+!data/processed/.gitkeep
+
+# Models and Outputs
+models/artifacts/*
+!models/artifacts/.gitkeep
+outputs/eda/*
+outputs/reports/*
+!outputs/eda/.gitkeep
+!outputs/reports/.gitkeep
+
+# Environment and Secrets
+.env
