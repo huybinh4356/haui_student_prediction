@@ -1,4 +1,6 @@
+README.md
 pyproject.toml
+src/haui_student_prediction/__init__.py
 src/haui_student_prediction/app_config.py
 src/haui_student_prediction.egg-info/PKG-INFO
 src/haui_student_prediction.egg-info/SOURCES.txt
@@ -6,6 +8,7 @@ src/haui_student_prediction.egg-info/dependency_links.txt
 src/haui_student_prediction.egg-info/requires.txt
 src/haui_student_prediction.egg-info/top_level.txt
 src/haui_student_prediction/config/__init__.py
+src/haui_student_prediction/config/course_profiles.py
 src/haui_student_prediction/data/__init__.py
 src/haui_student_prediction/data/cleaning.py
 src/haui_student_prediction/data/column_mapping.py
@@ -34,5 +37,8 @@ src/haui_student_prediction/services/prediction_service.py
 src/haui_student_prediction/services/report_service.py
 src/haui_student_prediction/services/risk_prediction_service.py
 src/haui_student_prediction/storage/__init__.py
+src/haui_student_prediction/storage/dataset_repository.py
+src/haui_student_prediction/storage/h2_database.py
+src/haui_student_prediction/ui/__init__.py
 src/haui_student_prediction/ui/main_window.py
 src/haui_student_prediction/ui/views/__init__.py
