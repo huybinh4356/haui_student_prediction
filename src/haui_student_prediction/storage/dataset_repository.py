@@ -1,53 +1,44 @@
 import logging
 from typing import Optional
+import pandas as pd
 
+# Chèn thêm 2 import mới này
+from storage.sqlite_database import SQLiteDatabase
+# from models.student_record import StudentRecord  # Bỏ comment và sửa lại đường dẫn nếu cần
+
+# Giữ nguyên phần khai báo logger cũ
 logger = logging.getLogger(__name__)
+class DataRepository:
+    def __init__(self):
+        self.db = SQLiteDatabase()
 
-
-class DatasetRepository:
-    def __init__(self, h2_database_module):
-        self._db = h2_database_module
-
-    def save_dataset_meta(
-        self, session_id: str, source_file: str,
-        row_count: int, validation_status: str,
-    ) -> None:
-        conn = self._db.get_connection()
-        try:
-            ps = conn.prepareStatement(
-                "MERGE INTO datasets (session_id, source_file, row_count, validation_status) "
-                "KEY(session_id) VALUES (?, ?, ?, ?)"
-            )
-            ps.setString(1, session_id)
-            ps.setString(2, source_file)
-            ps.setInt(3, row_count)
-            ps.setString(4, validation_status)
-            ps.executeUpdate()
-            ps.close()
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-        finally:
-            conn.close()
-
-    def get_dataset_meta(self, session_id: str) -> Optional[dict]:
-        conn = self._db.get_connection()
-        try:
-            ps = conn.prepareStatement(
-                "SELECT session_id, source_file, imported_at, row_count, validation_status "
-                "FROM datasets WHERE session_id = ?"
-            )
-            ps.setString(1, session_id)
-            rs = ps.executeQuery()
-            if rs.next():
-                return {
-                    "session_id": rs.getString("session_id"),
-                    "source_file": rs.getString("source_file"),
-                    "imported_at": rs.getString("imported_at"),
-                    "row_count": rs.getInt("row_count"),
-                    "validation_status": rs.getString("validation_status"),
-                }
+    def get_student_by_id(self, student_id: str) -> Optional[StudentRecord]:
+        query = "SELECT * FROM student_records WHERE student_id = ?"
+        result = self.db.fetch_all(query, (student_id,))
+        
+        if not result:
             return None
-        finally:
-            conn.close()
+            
+        row = result[0]
+        return StudentRecord(
+            student_id=row['student_id'],
+            full_name=row['full_name'],
+            absence_percentage=row['absence_percentage'],
+            lms_learning_percentage=row['lms_learning_percentage'],
+            tx1_score=row['tx1_score'],
+            midterm_score=row['midterm_score'],
+            tx2_score=row['tx2_score'],
+            has_tx2=bool(row['has_tx2']),
+            interaction_score=row['interaction_score'],
+            stress_score=row['stress_score'],
+            motivation_score=row['motivation_score'],
+            works_part_time=bool(row['works_part_time']) if row['works_part_time'] is not None else None,
+            actual_final_exam_score=row['actual_final_exam_score'],
+            date_of_birth=row['date_of_birth'],
+            birth_year=row['birth_year'],
+            hometown=row['hometown'],
+            major=row['major'],
+            course_id=row['course_id'],
+            semester=row['semester'],
+            snapshot_date=row['snapshot_date']
+        )
