@@ -1,5 +1,6 @@
 from typing import List
-from haui_student_prediction.data.ingestion_service import IngestionService, IngestionResult
+
+from haui_student_prediction.data.ingestion_service import IngestionResult, IngestionService
 from haui_student_prediction.storage.dataset_repository import DataRepository
 
 
@@ -17,8 +18,27 @@ class DatasetService:
         result = self.ingestion_service.load_and_validate(
             file_path, required_cols, courses_with_tx2
         )
-        if result.is_success and result.data is not None:
-            self._repository.save_session_data(result.data)
+        if not result.is_success or result.data is None:
+            return result
+
+        if not self._repository.save_session_data(result.data):
+            return IngestionResult(
+                is_success=False,
+                data=None,
+                errors=[
+                    *result.errors,
+                    {
+                        "kind": "storage_error",
+                        "error": (
+                            "Không thể lưu dataset vào SQLite. "
+                            "Kiểm tra quyền ghi và đường dẫn database."
+                        ),
+                    },
+                ],
+                missing_columns=result.missing_columns,
+                duplicate_indices=result.duplicate_indices,
+                warnings=result.warnings,
+            )
         return result
 
     def process_and_import_file(
