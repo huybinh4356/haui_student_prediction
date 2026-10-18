@@ -1,8 +1,3 @@
-from haui_student_prediction.storage.h2_database import (
-    start_jvm, get_connection, shutdown_jvm, init_schema,
-)
-from haui_student_prediction.storage.dataset_repository import DatasetRepository
+from haui_student_prediction.storage.dataset_repository import DataRepository
 
-__all__ = [
-    "start_jvm", "get_connection", "shutdown_jvm", "init_schema", "DatasetRepository",
-]
+__all__ = ["DataRepository"]

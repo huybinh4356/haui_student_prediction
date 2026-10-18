@@ -1,11 +1,15 @@
+from pathlib import Path
 import sqlite3
 import pandas as pd
-import os
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
+_DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "student_data.db"
+
 
 class SQLiteDatabase:
-    def __init__(self, db_path="data/student_data.db"):
-        self.db_path = db_path
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+    def __init__(self, db_path: Path | str | None = None):
+        self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def get_connection(self):
         conn = sqlite3.connect(self.db_path)
@@ -27,4 +31,4 @@ class SQLiteDatabase:
 
     def fetch_dataframe(self, query, params=()):
         with self.get_connection() as conn:
-            return pd.read_sql_query(query, conn, params=params)
+            return pd.read_sql_query(query, conn, params=list(params))
