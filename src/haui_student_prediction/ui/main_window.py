@@ -136,7 +136,7 @@ class MainWindow(QMainWindow):
         kpi_layout = QHBoxLayout()
         card_total, self.lbl_kpi_total = self._create_kpi_card("Tổng bản ghi đã nạp", "0", "#0066CC")
         card_valid, self.lbl_kpi_valid = self._create_kpi_card("Trạng thái dữ liệu", "Chưa có dữ liệu", "#28A745")
-        card_model, self.lbl_kpi_model = self._create_kpi_card("Mô hình ML", "Sẵn sàng (v1.0.0)", "#6F42C1")
+        card_model, self.lbl_kpi_model = self._create_kpi_card("Mô hình ML", "Đang kiểm tra...", "#6F42C1")
         
         kpi_layout.addWidget(card_total)
         kpi_layout.addWidget(card_valid)
@@ -144,6 +144,7 @@ class MainWindow(QMainWindow):
         
         layout.addLayout(kpi_layout)
         layout.addStretch()
+        self._update_dashboard()
 
     def _update_dashboard(self):
         if self.current_df is not None:
@@ -154,6 +155,17 @@ class MainWindow(QMainWindow):
             self.lbl_kpi_total.setText("0")
             self.lbl_kpi_valid.setText("Chưa nạp")
             self.lbl_kpi_valid.setStyleSheet("color: #DC3545; font-size: 24px; font-weight: bold;")
+
+        model_ready = False
+        if hasattr(self.prediction_service, "is_model_ready"):
+            model_ready = self.prediction_service.is_model_ready("1.0.0")
+
+        if model_ready:
+            self.lbl_kpi_model.setText("Sẵn sàng (v1.0.0)")
+            self.lbl_kpi_model.setStyleSheet("color: #28A745; font-size: 24px; font-weight: bold;")
+        else:
+            self.lbl_kpi_model.setText("Chưa sẵn sàng dự đoán")
+            self.lbl_kpi_model.setStyleSheet("color: #DC3545; font-size: 20px; font-weight: bold;")
 
     def _build_import_page(self):
         layout = QVBoxLayout(self.page_import)
@@ -193,15 +205,26 @@ class MainWindow(QMainWindow):
             
             if result.is_success:
                 self.current_df = result.data
-                self.lbl_import_status.setText(f"Thành công! Đã nạp {len(self.current_df)} bản ghi.")
+                warn_msg = ""
+                if result.warnings:
+                    warn_msg = f"\nCảnh báo: {len(result.warnings)} bản ghi có điểm ngoài tham chiếu (cần xác nhận thang điểm)."
+                self.lbl_import_status.setText(f"Thành công! Đã nạp {len(self.current_df)} bản ghi.{warn_msg}")
                 self.lbl_import_status.setStyleSheet("color: #28A745;")
                 self._populate_table(self.table_import, self.current_df)
                 self._update_dashboard()
                 self._refresh_eda_options()
+                if warn_msg:
+                    QMessageBox.information(self, "Cảnh báo thang điểm",
+                        "Một số giá trị điểm nằm ngoài tham chiếu 0-10 (theo risk module). "
+                        "Vui lòng xác nhận thang điểm thực tế của dữ liệu.")
             else:
                 self.lbl_import_status.setText("Lỗi kiểm tra dữ liệu")
                 self.lbl_import_status.setStyleSheet("color: #DC3545;")
-                QMessageBox.warning(self, "Lỗi Dữ liệu", f"Thiếu cột: {result.missing_columns}\nLỗi khác: {len(result.errors)}")
+                dup_info = f"\nBản ghi trùng: {len(result.duplicate_indices)}" if result.duplicate_indices else ""
+                QMessageBox.warning(
+                    self, "Lỗi Dữ liệu",
+                    f"Thiếu cột: {result.missing_columns}\nSố lỗi: {len(result.errors)}{dup_info}",
+                )
         except Exception as e:
             self.lbl_import_status.setText("Lỗi hệ thống")
             QMessageBox.critical(self, "Lỗi hệ thống", str(e))
@@ -289,6 +312,14 @@ class MainWindow(QMainWindow):
     def _handle_predict(self):
         if self.current_df is None:
             QMessageBox.warning(self, "Cảnh báo", "Vui lòng nhập dữ liệu trước.")
+            return
+
+        if hasattr(self.prediction_service, "is_model_ready") and not self.prediction_service.is_model_ready("1.0.0"):
+            QMessageBox.warning(
+                self, 
+                "Chưa sẵn sàng dự đoán", 
+                "Mô hình ML (v1.0.0) chưa được huấn luyện hoặc artifact chưa tồn tại trong hệ thống.\nVui lòng huấn luyện mô hình trước khi thực hiện dự đoán."
+            )
             return
             
         try:

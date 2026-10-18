@@ -7,6 +7,8 @@ echo KHOI TAO MOI TRUONG DU AN HAUI STUDENT PREDICTION
 echo ===================================================
 echo.
 
+cd /d "%~dp0"
+
 echo [1/4] Dang kiem tra va tao moi truong ao (.venv)...
 if not exist .venv (
     python -m venv .venv

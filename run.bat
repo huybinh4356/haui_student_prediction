@@ -7,6 +7,8 @@ echo KHOI DONG UNG DUNG HAUI STUDENT PREDICTION
 echo ===================================================
 echo.
 
+cd /d "%~dp0"
+
 if not exist .venv\Scripts\activate.bat (
     color 0C
     echo [LOI] Khong tim thay moi truong ao!
