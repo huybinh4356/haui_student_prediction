@@ -19,7 +19,7 @@ class RiskCalculator:
             'stress': 0.015,
             'motivation': 0.015
         }
-        
+
     def _normalize_absence(self, percentage: float) -> Tuple[float, str]:
         if percentage > 30:
             return 100.0, "REPEAT_REQUIRED"
@@ -97,7 +97,7 @@ class RiskCalculator:
             self.weights['stress'] * stress_risk +
             self.weights['motivation'] * mot_risk
         )
-        
+
         return RiskResult(
             absence_status=status,
             weighted_score=total_risk,

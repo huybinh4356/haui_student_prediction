@@ -1,1 +1,27 @@
-{}
+{
+    "1.0.0": {
+        "version": "1.0.0",
+        "dataset_hash": "5845487522144317562",
+        "metrics": {
+            "mae": 0.5051455393785722,
+            "rmse": 0.6411405486235888,
+            "r2": 0.6968047265027542
+        },
+        "features": {
+            "numerical_features": [
+                "tx1_score",
+                "midterm_score",
+                "absence_percentage",
+                "lms_learning_percentage",
+                "interaction_score",
+                "stress_score",
+                "motivation_score"
+            ],
+            "categorical_features": [
+                "works_part_time"
+            ],
+            "target_column": "actual_final_exam_score"
+        },
+        "artifact_filename": "model_v1.0.0.joblib"
+    }
+}

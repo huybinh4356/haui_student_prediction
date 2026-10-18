@@ -12,7 +12,9 @@ class IngestionResult:
     errors: List[Dict[str, Any]]                # hard errors (block success)
     missing_columns: List[str]
     duplicate_indices: List[int]
-    warnings: List[Dict[str, Any]] = field(default_factory=list)   # non-blocking notes (e.g. score scale needs confirmation)
+    warnings: List[Dict[str, Any]] = field(
+        default_factory=list,
+    )  # non-blocking notes
 
 class IngestionService:
     """Policy summary (requirement #5 & #6):
@@ -33,7 +35,10 @@ class IngestionService:
         self.cleaner = cleaner
         self.validator = validator
 
-    def load_and_validate(self, file_path: str, required_cols: List[str], courses_with_tx2: List[str]) -> IngestionResult:
+    def load_and_validate(
+        self, file_path: str, required_cols: List[str],
+        courses_with_tx2: List[str],
+    ) -> IngestionResult:
         path = Path(file_path)
         if not path.exists():
             raise FileNotFoundError(f"File not found: {file_path}")
@@ -63,9 +68,16 @@ class IngestionService:
         )
 
         # Score scale: no explicit config -> notes only (do not block).
-        score_cols = [c for c in ["tx1_score", "tx2_score", "midterm_score", "actual_final_exam_score"]
-                      if c in df_final.columns]
-        _score_errors, score_notes = self.validator.validate_score_scale(df_final, score_cols, max_score=None)
+        score_cols = [
+            c for c in [
+                "tx1_score", "tx2_score", "midterm_score",
+                "actual_final_exam_score",
+            ]
+            if c in df_final.columns
+        ]
+        _score_errors, score_notes = self.validator.validate_score_scale(
+            df_final, score_cols, max_score=None,
+        )
 
         all_hard_errors: List[Dict[str, Any]] = []
         all_hard_errors.extend(perc_errors)
@@ -76,7 +88,10 @@ class IngestionService:
                 "column": "student_id,course_id,semester",
                 "rows": [int(i) for i in duplicate_indices],
                 "count": len(duplicate_indices),
-                "error": f"{len(duplicate_indices)} duplicate record(s) on (student_id, course_id, semester)",
+                "error": (
+                    f"{len(duplicate_indices)} duplicate record(s) on "
+                    "(student_id, course_id, semester)"
+                ),
                 "kind": "duplicate",
             })
 

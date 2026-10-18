@@ -8,7 +8,10 @@ class DatasetRepository:
     def __init__(self, h2_database_module):
         self._db = h2_database_module
 
-    def save_dataset_meta(self, session_id: str, source_file: str, row_count: int, validation_status: str) -> None:
+    def save_dataset_meta(
+        self, session_id: str, source_file: str,
+        row_count: int, validation_status: str,
+    ) -> None:
         conn = self._db.get_connection()
         try:
             ps = conn.prepareStatement(

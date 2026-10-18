@@ -52,7 +52,8 @@ def start_jvm() -> None:
     jar = _find_h2_jar()
     if not jar:
         raise RuntimeError(
-            "H2 JDBC JAR not found. Set HAUI_H2_JAR env var or place jar at vendor/h2/h2-2.5.252.jar"
+            "H2 JDBC JAR not found. "
+            "Set HAUI_H2_JAR env var or place jar at vendor/h2/h2-2.5.252.jar"
         )
     _H2_JAR_PATH = jar
 

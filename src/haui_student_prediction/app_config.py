@@ -32,12 +32,22 @@ def load_config() -> AppConfig:
         load_dotenv(dotenv_path=env_file)
     else:
         load_dotenv()
-    
+
     return AppConfig(
         env=os.getenv("APP_ENV", "development"),
-        data_raw_dir=_resolve_path(base_dir, os.getenv("DATA_RAW_DIR", "data/raw")),
-        data_processed_dir=_resolve_path(base_dir, os.getenv("DATA_PROCESSED_DIR", "data/processed")),
-        model_registry_path=_resolve_path(base_dir, os.getenv("MODEL_REGISTRY_PATH", "models/registry.json")),
-        model_artifacts_dir=_resolve_path(base_dir, os.getenv("MODEL_ARTIFACTS_DIR", "models/artifacts")),
-        report_output_dir=_resolve_path(base_dir, os.getenv("REPORT_OUTPUT_DIR", "outputs/reports"))
+        data_raw_dir=_resolve_path(
+            base_dir, os.getenv("DATA_RAW_DIR", "data/raw"),
+        ),
+        data_processed_dir=_resolve_path(
+            base_dir, os.getenv("DATA_PROCESSED_DIR", "data/processed"),
+        ),
+        model_registry_path=_resolve_path(
+            base_dir, os.getenv("MODEL_REGISTRY_PATH", "models/registry.json"),
+        ),
+        model_artifacts_dir=_resolve_path(
+            base_dir, os.getenv("MODEL_ARTIFACTS_DIR", "models/artifacts"),
+        ),
+        report_output_dir=_resolve_path(
+            base_dir, os.getenv("REPORT_OUTPUT_DIR", "outputs/reports"),
+        ),
     )

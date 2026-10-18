@@ -9,7 +9,9 @@ echo.
 
 cd /d "%~dp0"
 
-if not exist .venv\Scripts\activate.bat (
+set "VENV_PYTHON=%~dp0.venv\Scripts\python.exe"
+
+if not exist "%VENV_PYTHON%" (
     color 0C
     echo [LOI] Khong tim thay moi truong ao!
     echo Vui long nhay dup vao file "setup.bat" de cai dat truoc.
@@ -17,11 +19,8 @@ if not exist .venv\Scripts\activate.bat (
     exit /b 1
 )
 
-echo Dang kich hoat moi truong ao...
-call .venv\Scripts\activate.bat
-
 echo Dang mo giao dien nguoi dung...
-python main.py
+"%VENV_PYTHON%" main.py
 
 if %ERRORLEVEL% NEQ 0 (
     color 0C

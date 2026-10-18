@@ -7,8 +7,13 @@ class DatasetService:
         self.current_dataset = None
         self.dataset_version = None
 
-    def import_dataset(self, file_path: str, required_cols: list[str], courses_with_tx2: list[str]) -> IngestionResult:
-        result = self.ingestion_service.load_and_validate(file_path, required_cols, courses_with_tx2)
+    def import_dataset(
+        self, file_path: str, required_cols: list[str],
+        courses_with_tx2: list[str],
+    ) -> IngestionResult:
+        result = self.ingestion_service.load_and_validate(
+            file_path, required_cols, courses_with_tx2,
+        )
         if result.is_success and result.data is not None:
             self.current_dataset = result.data
             self.dataset_version = str(pd.util.hash_pandas_object(result.data).sum())

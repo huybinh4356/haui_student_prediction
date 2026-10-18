@@ -6,7 +6,6 @@ duplicates, valid file, and TX2 determination.
 """
 import pytest
 import pandas as pd
-import numpy as np
 from pathlib import Path
 
 from haui_student_prediction.data.cleaning import DataCleaner
@@ -145,7 +144,11 @@ def test_empty_cell_is_legitimate_missing(service, tmp_path):
 
 def test_boolean_false_string_not_true(cleaner):
     """Requirement #3: the string 'False' must NOT be interpreted as True."""
-    df = pd.DataFrame({"works_part_time": ["False", "True", "0", "1", "yes", "no", "không", "có", "xyz", ""]})
+    df = pd.DataFrame({
+        "works_part_time": [
+            "False", "True", "0", "1", "yes", "no", "không", "có", "xyz", "",
+        ],
+    })
     out = cleaner.convert_types(df)
     vals = out["works_part_time"].tolist()
     assert bool(vals[0]) is False   # "False"

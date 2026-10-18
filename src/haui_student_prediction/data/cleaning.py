@@ -101,7 +101,7 @@ class DataCleaner:
                     "row": int(idx),
                     "column": "works_part_time",
                     "value": str(original.loc[idx]),
-                    "error": f"Unrecognised boolean value in column 'works_part_time'",
+                    "error": "Unrecognised boolean value in column 'works_part_time'",
                     "kind": "boolean_conversion",
                 })
             df_clean["works_part_time"] = parsed
@@ -137,7 +137,9 @@ class DataCleaner:
         """Return conversion errors recorded during the last convert_types() call."""
         return list(self._conversion_errors)
 
-    def determine_tx2_applicability(self, df: pd.DataFrame, courses_with_tx2: list[str]) -> pd.DataFrame:
+    def determine_tx2_applicability(
+        self, df: pd.DataFrame, courses_with_tx2: list[str],
+    ) -> pd.DataFrame:
         df_clean = df.copy()
         if "course_id" in df_clean.columns:
             df_clean["has_tx2"] = df_clean["course_id"].isin(courses_with_tx2)

@@ -73,7 +73,8 @@ def train_and_evaluate(
     df_train_fit = df_train.loc[train_mask]
     if len(df_train_fit) < 3:
         raise ValueError(
-            f"After dropping NaN targets, only {len(df_train_fit)} usable training rows; need at least 3"
+            f"After dropping NaN targets, only {len(df_train_fit)} "
+            "usable training rows; need at least 3"
         )
 
     builder = FeatureBuilder(contract)

@@ -7,7 +7,6 @@ fixtures -- no real student data.
 import pytest
 import pandas as pd
 import numpy as np
-from pathlib import Path
 
 from haui_student_prediction.features.feature_contract import (
     FeatureContract,
@@ -369,3 +368,91 @@ def test_no_feature_leakage_end_to_end(contract):
     # No identifier columns in X
     for ident in IDENTIFIER_COLUMNS:
         assert ident not in X.columns
+
+
+# ---- 10. registry corruption & missing artifact ----------------------------
+
+def test_registry_corrupt_metadata_returns_false(registry, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "h", metrics, contract)
+
+    # Corrupt the registry entry by replacing with a string
+    data = registry._load_registry()
+    data["1.0.0"] = "corrupt"
+    registry._save_registry(data)
+
+    assert not registry.has_model("1.0.0")
+
+
+def test_registry_missing_artifact_file_returns_false(registry, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "h", metrics, contract)
+
+    # Delete artifact file but keep registry entry
+    artifact_path = registry.artifacts_dir / "model_v1.0.0.joblib"
+    artifact_path.unlink()
+
+    assert not registry.has_model("1.0.0")
+
+
+def test_registry_load_missing_artifact_raises(registry, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "h", metrics, contract)
+
+    artifact_path = registry.artifacts_dir / "model_v1.0.0.joblib"
+    artifact_path.unlink()
+
+    with pytest.raises(FileNotFoundError, match="missing on disk"):
+        registry.load_model("1.0.0")
+
+
+def test_registry_missing_features_returns_false(registry, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "h", metrics, contract)
+
+    data = registry._load_registry()
+    del data["1.0.0"]["features"]
+    registry._save_registry(data)
+
+    assert not registry.has_model("1.0.0")
+
+
+# ---- 11. training with missing target labels --------------------------------
+
+def test_train_with_some_nan_target_ok(contract):
+    """Rows with NaN target should be dropped from training, not crash."""
+    df_train = _make_train_df(n=20)
+    df_train.loc[0:2, TARGET] = np.nan
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    assert metrics.mae >= 0
+    assert metrics.rmse >= 0
+
+
+# ---- 12. prediction service unavailable model -------------------------------
+
+def test_prediction_service_unavailable_after_artifact_deleted(
+    registry, scoring_service, contract,
+):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "h", metrics, contract)
+
+    svc = PredictionService(registry, scoring_service)
+    assert svc.is_model_ready("1.0.0")
+
+    artifact_path = registry.artifacts_dir / "model_v1.0.0.joblib"
+    artifact_path.unlink()
+
+    assert not svc.is_model_ready("1.0.0")
+    with pytest.raises(RuntimeError, match="not ready"):
+        svc.predict_student_results(df_test, "1.0.0", "no_tx2")
