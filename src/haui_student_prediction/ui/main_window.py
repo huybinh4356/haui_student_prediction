@@ -199,9 +199,9 @@ class MainWindow(QMainWindow):
             self.lbl_import_status.setText("Đang xử lý...")
             QApplication.processEvents()
             
+            from haui_student_prediction.config.course_profiles import DEFAULT_COURSES_WITH_TX2
             required_cols = ["student_id", "absence_percentage", "tx1_score", "midterm_score"]
-            courses_tx2 = ["IT101", "IT102"] 
-            result = self.dataset_service.import_dataset(file_path, required_cols, courses_tx2)
+            result = self.dataset_service.import_dataset(file_path, required_cols, DEFAULT_COURSES_WITH_TX2)
             
             if result.is_success:
                 self.current_df = result.data

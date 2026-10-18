@@ -15,7 +15,7 @@ from haui_student_prediction.features.feature_contract import (
 )
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
-from haui_student_prediction.ml.train_regressor import train_and_evaluate, ModelMetrics
+from haui_student_prediction.ml.train_regressor import train_and_evaluate
 from haui_student_prediction.ml.model_registry import ModelRegistry
 from haui_student_prediction.scoring.final_course_score import (
     CourseProfile,
@@ -170,7 +170,6 @@ def test_preprocessing_rejects_empty_columns():
 def test_preprocessing_handles_unseen_category():
     """OneHotEncoder with handle_unknown='ignore' must not crash on unseen
     categories at transform time."""
-    import numpy as np
     pipe = build_preprocessing_pipeline(["a"], ["cat"])
     X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0], "cat": ["x", "y", "x", "y"]})
     pipe.fit(X_train)

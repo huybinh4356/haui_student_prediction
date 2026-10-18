@@ -10,7 +10,8 @@ from haui_student_prediction.services.dataset_service import DatasetService
 
 from haui_student_prediction.eda.charts import ChartService
 
-from haui_student_prediction.scoring.final_course_score import CourseProfile, ScoringService
+from haui_student_prediction.scoring.final_course_score import ScoringService
+from haui_student_prediction.config.course_profiles import DEFAULT_COURSE_PROFILES
 from haui_student_prediction.ml.model_registry import ModelRegistry
 from haui_student_prediction.services.prediction_service import PredictionService
 
@@ -21,22 +22,22 @@ from haui_student_prediction.ui.main_window import MainWindow
 
 def main():
     config = load_config()
-    
+
     cleaner = DataCleaner(get_default_column_mapping())
     validator = DataValidator()
     ingestion_service = IngestionService(cleaner, validator)
     dataset_service = DatasetService(ingestion_service)
-    
+
     chart_service = ChartService(str(config.report_output_dir))
-    
+
     profiles = {
-        "no_tx2": CourseProfile(0.20, 0.0, 0.20, 0.60, False),
-        "with_tx2": CourseProfile(0.15, 0.15, 0.20, 0.50, True)
+        k: v.to_scoring_profile()
+        for k, v in DEFAULT_COURSE_PROFILES.items()
     }
     scoring_service = ScoringService(profiles)
     model_registry = ModelRegistry(str(config.model_registry_path), str(config.model_artifacts_dir))
     prediction_service = PredictionService(model_registry, scoring_service)
-    
+
     risk_calculator = RiskCalculator()
     risk_service = RiskPredictionService(risk_calculator)
 
