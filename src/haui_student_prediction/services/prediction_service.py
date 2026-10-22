@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from haui_student_prediction.ml.model_registry import ModelRegistry
+from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION, ModelRegistry
 from haui_student_prediction.scoring.final_course_score import ScoringService
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
@@ -23,7 +23,7 @@ class PredictionService:
         self.registry = registry
         self.scoring_service = scoring_service
 
-    def is_model_ready(self, model_version: str = "1.0.0") -> bool:
+    def is_model_ready(self, model_version: str = ACTIVE_MODEL_VERSION) -> bool:
         """True iff a model artifact + metadata are available for the version."""
         return self.registry.has_model(model_version)
 
