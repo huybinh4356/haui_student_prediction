@@ -6,6 +6,7 @@ Desktop application for analyzing student performance data, predicting final exa
 
 - Python 3.10 or newer
 - Windows 10/11 is the primary development environment
+- XGBoost is used by the primary final-exam score prediction model
 
 The session dataset store uses Python's built-in `sqlite3` module.
 
@@ -22,25 +23,34 @@ Create and activate a virtual environment:
 
 ```powershell
 python -m venv .venv
-.venv\Scripts\Activate.ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 Install the application and development dependencies:
 
 ```powershell
 python -m pip install --upgrade pip
-pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 ```
 
-Alternatively, install from requirements:
+Verify that XGBoost is installed in the active Python environment:
 
 ```powershell
-pip install -r requirements.txt
+python -c "import xgboost; print(xgboost.__version__)"
 ```
+
+Alternatively, install the listed dependencies first and then install the project in editable mode:
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install -e . --no-deps
+```
+
+On Windows, you can also run `setup.bat` to create or reuse `.venv`, install the project and development dependencies, and verify XGBoost. Start the application with `run.bat`.
 
 ## Run the application
 
-From the repository root:
+From the repository root with the virtual environment activated:
 
 ```powershell
 python main.py
@@ -72,8 +82,9 @@ When historical data with `actual_final_exam_score` is available:
 
 1. Import the validated dataset.
 2. Use the model training workflow in the UI or supported script.
-3. Model artifacts are saved to `models/artifacts/`.
-4. Registry metadata is saved to `models/registry.json`.
+3. The application trains the configured XGBoost regressor and evaluates it on a held-out test set.
+4. Model artifacts are saved to `models/artifacts/`.
+5. Registry metadata is saved to `models/registry.json`.
 
 ## Tests
 
