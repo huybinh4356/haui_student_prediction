@@ -8,11 +8,12 @@ from xgboost import XGBRegressor
 
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
+from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
 from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
 from haui_student_prediction.ml.train_regressor import ModelMetrics
 
 
-XGBOOST_MODEL_VERSION = "xgboost-1.0.0"
+XGBOOST_MODEL_VERSION = ACTIVE_MODEL_VERSION
 
 
 def _new_pipeline(contract: FeatureContract) -> Pipeline:
