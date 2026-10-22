@@ -7,7 +7,7 @@ Desktop application for analyzing student performance data, predicting final exa
 - Python 3.10 or newer
 - Windows 10/11 is the primary development environment
 
-The session dataset store uses Python's built-in `sqlite3` module. Java, H2 JDBC, and JPype are not required for SQLite storage.
+The session dataset store uses Python's built-in `sqlite3` module.
 
 ## Installation
 
