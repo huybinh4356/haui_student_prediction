@@ -13,38 +13,46 @@ tests/
 
 | Module | Test File | Focus |
 |--------|-----------|-------|
-| data/ingestion | test_ingestion.py | File read, validation, boolean, missing, duplicates |
-| data/cleaning | (via ingestion) | Type conversion, empty handling |
-| scoring/ | test_course_scoring.py | Formula correctness, TX2 handling |
-| risk/ | test_risk_calculator.py + test_risk_service.py | Boundaries, weights, missing data |
-| features/ | test_ml_pipeline.py | Contract validation, builder, leakage |
-| ml/ | test_ml_pipeline.py | Pipeline, train/eval, registry, edge cases |
-| services/ | test_ml_pipeline.py | Prediction, schema mismatch, no-model |
-| storage/ | test_h2_integration.py | H2 CRUD, rollback, schema |
+| data/ingestion | test_ingestion.py | File reading, validation, booleans, missing values, duplicates |
+| data/cleaning | test_ingestion.py | Type conversion and empty-data handling |
+| scoring/ | test_course_scoring.py | Formula correctness and TX2 handling |
+| risk/ | test_risk_calculator.py, test_risk_service.py | Risk boundaries, weights and missing fields |
+| features/ | test_ml_pipeline.py | Feature contract, feature builder and leakage checks |
+| ml/ | test_ml_pipeline.py, test_xgboost_regressor.py | Preprocessing, baseline pipeline, XGBoost training, evaluation and edge cases |
+| services/ | test_ml_pipeline.py, test_dataset_service.py | Prediction schema, missing-model behavior and failed persistence |
+| storage/ | test_sqlite_repository.py | SQLite persistence, missing tables, invalid identifiers and replacement behavior |
 
 ## Running Tests
 
-```bash
-# All unit tests
-python -m pytest tests/unit/ -v
+Run all unit tests:
 
-# With coverage
-python -m pytest tests/unit/ --cov=src --cov-report=html
+```powershell
+python -m pytest tests/unit -v
+```
 
-# H2 tests (requires JDK)
-python -m pytest tests/unit/test_h2_integration.py -v
+Run storage tests:
+
+```powershell
+python -m pytest tests/unit/test_sqlite_repository.py tests/unit/test_dataset_service.py -v
+```
+
+Run the XGBoost test:
+
+```powershell
+python -m pytest tests/unit/test_xgboost_regressor.py -v
 ```
 
 ## CI Checks
 
-```bash
+```powershell
 ruff check src tests
 python -m compileall src tests
-python -m pytest tests/unit/
+python -m pytest tests/unit
 ```
 
 ## Test Data
 
-- All tests use synthetic data
-- No real student data in repository
-- Fixtures in `tests/fixtures/`
+- Tests use synthetic data.
+- Real student data must not be committed.
+- Fixtures are stored in `tests/fixtures/`.
+- A written test is not evidence that it has passed; record the actual test run result.
