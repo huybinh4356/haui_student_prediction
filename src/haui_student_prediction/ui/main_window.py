@@ -8,9 +8,8 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
@@ -34,6 +33,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+
+from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
 
 
 class _MetricCard(QFrame):
