@@ -40,10 +40,10 @@ outputs/reports/*
 .DS_Store
 Thumbs.db
 
-# Database / vendor
-vendor/h2/*.jar
-*.h2.db
-*.mv.db
+# SQLite databases
+*.db
+*.sqlite
+*.sqlite3
 
 # Logs
 *.log
@@ -60,7 +60,7 @@ dist/
 build/
 *.egg-info/
 
-# Model artifacts (never commit real models without metadata)
+# Model artifacts
 models/artifacts/*.joblib
 models/artifacts/*.pkl
 models/artifacts/*.pickle
