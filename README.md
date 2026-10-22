@@ -1,139 +1,132 @@
-# HaUI Student Performance & Academic Risk Prediction System
-
-Desktop application for analyzing student performance data, predicting final exam scores, and assessing academic risk for HaUI (Hanoi University of Industry).
-
-## Prerequisites
-
-- Python 3.11+
-- Java JDK 17+ (required for H2 Database integration)
-- Windows 10/11 (developed and tested on Windows)
-
-## Installation
-
-1. Clone the repository:
-
-```bash
-git clone <repository-url>
-cd haui_student_prediction
-```
-
-1. Create and activate virtual environment:
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate  # Windows
-```
-
-1. Install dependencies:
-
-```bash
-pip install -e ".[dev]"
-```
-
-1. Download H2 JDBC JAR (required for session storage):
-
-```bash
-# The application expects H2 JAR at vendor/h2/h2-2.5.252.jar
-# Or set environment variable HAUI_H2_JAR to point to your JAR file
-mkdir vendor\h2
-# Download from https://repo1.maven.org/maven2/com/h2database/h2/2.5.252/h2-2.5.252.jar
-```
-
-1. Verify Java is available:
-
-```bash
-java -version
-```
-
-## Running the Application
-
-```bash
-python main.py
-```
-
-## Data Import
-
-The application supports CSV and Excel (.xlsx) files. Required columns include:
-
-- `student_id` (MSV)
-- `absence_percentage` (0-100)
-- `tx1_score`, `midterm_score`
-- Optional: `tx2_score`, `lms_learning_percentage`, `interaction_score`, `stress_score`, `motivation_score`, `works_part_time`
-
-Import workflow:
-
-1. Select file via UI
-2. Column mapping and validation
-3. Review errors/warnings/duplicates
-4. Confirm import
-
-## EDA
-
-Exploratory Data Analysis is available via the UI or programmatically through `ChartService`. Charts exclude `student_id` and `full_name` from quantitative analysis.
-
-## Training Model
-
-When historical data with `actual_final_exam_score` is available:
-
-1. Import validated dataset
-2. Use the model training workflow (UI or script)
-3. Model artifacts are saved to `models/artifacts/`
-4. Registry metadata at `models/registry.json`
-
-## Running Tests
-
-```bash
-# All tests
-python -m pytest tests/unit/ -v
-
-# Specific modules
-python -m pytest tests/unit/test_ingestion.py -v
-python -m pytest tests/unit/test_ml_pipeline.py -v
-python -m pytest tests/unit/test_risk_service.py -v
-python -m pytest tests/unit/test_h2_integration.py -v
-```
-
-## Linting
-
-```bash
-ruff check src tests
-ruff format src tests
-```
-
-## Project Structure
-
-```
-haui_student_prediction/
-├── main.py                      # Application entry point
-├── pyproject.toml               # Dependencies and tool config
-├── src/haui_student_prediction/
-│   ├── data/                    # Ingestion, validation, cleaning
-│   ├── features/                # Feature contract & builder
-│   ├── ml/                      # Preprocessing, training, registry
-│   ├── risk/                    # Risk calculator & rules
-│   ├── scoring/                 # Course score formulas
-│   ├── services/                # Service layer (UI calls these)
-│   ├── storage/                 # H2 database integration
-│   ├── eda/                     # Charts & statistics
-│   ├── ui/                      # PyQt6 interface
-│   └── config/                  # Course profiles & settings
-├── tests/
-│   ├── unit/                    # Unit tests
-│   ├── fixtures/                # Synthetic test data
-│   └── integration/             # Integration tests
-├── data/                        # Data directories (gitignored)
-├── models/                      # Model artifacts (gitignored)
-└── outputs/                     # Reports & charts (gitignored)
-```
-
-## Known Limitations
-
-- H2 runs in-memory; data does not persist across application restarts
-- JPype + JDK 25 may show "restricted method" warnings (non-blocking)
-- Model training requires historical data with `actual_final_exam_score`
-- Score scale (0-10) is derived from risk module; confirm with actual HaUI grading policy
-- Risk thresholds are prototype values; calibrate with historical data
-
-## License
-
-Internal academic use. Do not commit real student data to version control.
+# HaUI Student Performance & Academic Risk Prediction System
+
+Desktop application for analyzing student performance data, predicting final exam scores, and assessing academic risk for HaUI (Hanoi University of Industry).
+
+## Requirements
+
+- Python 3.10 or newer
+- Windows 10/11 is the primary development environment
+
+The session dataset store uses Python's built-in `sqlite3` module. Java, H2 JDBC, and JPype are not required for SQLite storage.
+
+## Installation
+
+Clone the repository:
+
+```powershell
+git clone https://github.com/huybinh4356/haui_student_prediction.git
+cd haui_student_prediction
+```
+
+Create and activate a virtual environment:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+```
+
+Install the application and development dependencies:
+
+```powershell
+python -m pip install --upgrade pip
+pip install -e ".[dev]"
+```
+
+Alternatively, install from requirements:
+
+```powershell
+pip install -r requirements.txt
+```
+
+## Run the application
+
+From the repository root:
+
+```powershell
+python main.py
+```
+
+The SQLite session database is stored at `data/session_student.db` by default. The application creates the parent directory when needed. Set `APP_BASE_DIR` to override the project data root when required.
+
+## Data import
+
+The application supports CSV and Excel (`.xls`, `.xlsx`) files. Common fields include:
+
+- `student_id` (MSV)
+- `absence_percentage` (0–100)
+- `tx1_score`, `midterm_score`
+- Optional: `tx2_score`, `lms_learning_percentage`, `interaction_score`, `stress_score`, `motivation_score`, `works_part_time`
+
+Import workflow:
+
+1. Select a file in the UI.
+2. Map and validate columns.
+3. Review errors, warnings, and duplicate rows.
+4. Confirm the import.
+
+An import is not reported as successful if writing the validated dataset to SQLite fails.
+
+## Training model
+
+When historical data with `actual_final_exam_score` is available:
+
+1. Import the validated dataset.
+2. Use the model training workflow in the UI or supported script.
+3. Model artifacts are saved to `models/artifacts/`.
+4. Registry metadata is saved to `models/registry.json`.
+
+## Tests
+
+Run the unit test suite:
+
+```powershell
+python -m pytest tests/unit -v
+```
+
+Run SQLite repository tests:
+
+```powershell
+python -m pytest tests/unit/test_sqlite_repository.py tests/unit/test_dataset_service.py -v
+```
+
+## Linting
+
+```powershell
+ruff check src tests
+```
+
+## Project structure
+
+```text
+haui_student_prediction/
+├── main.py
+├── pyproject.toml
+├── requirements.txt
+├── src/haui_student_prediction/
+│   ├── data/
+│   ├── features/
+│   ├── ml/
+│   ├── risk/
+│   ├── scoring/
+│   ├── services/
+│   ├── storage/
+│   ├── eda/
+│   ├── ui/
+│   └── config/
+├── tests/
+├── data/
+├── models/
+└── outputs/
+```
+
+## Known limitations
+
+- Dataset persistence currently stores the latest imported dataset in the `current_session` table; a new successful import replaces that table.
+- Model training requires historical data with `actual_final_exam_score`.
+- Score scale and risk thresholds should be confirmed against the applicable HaUI grading policy and historical data.
+
+Do not commit real student data or database files to version control.
+
+## License
+
+Internal academic use.

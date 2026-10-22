@@ -7,6 +7,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+
+from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
@@ -79,7 +81,7 @@ class _TrainingWorker(QThread):
             from haui_student_prediction.app_config import load_config
             from haui_student_prediction.features.feature_contract import FeatureContract
             from haui_student_prediction.ml.model_registry import ModelRegistry
-            from haui_student_prediction.ml.train_regressor import train_and_evaluate
+            from haui_student_prediction.ml.xgboost_regressor import train_xgboost_and_evaluate
 
             target_column = "actual_final_exam_score"
             if target_column not in self.dataframe.columns:
@@ -152,7 +154,7 @@ class _TrainingWorker(QThread):
             if len(train_data) < 3 or len(test_data) < 2:
                 raise ValueError("Tập train/test không đủ kích thước sau khi chia dữ liệu.")
 
-            model, metrics = train_and_evaluate(train_data, test_data, contract)
+            model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
             dataset_hash = hashlib.sha256(
                 pd.util.hash_pandas_object(data, index=True).values.tobytes()
             ).hexdigest()
@@ -163,17 +165,17 @@ class _TrainingWorker(QThread):
             )
             registry.save_model(
                 model=model,
-                version="1.0.0",
+                version=ACTIVE_MODEL_VERSION,
                 dataset_hash=dataset_hash,
                 metrics=metrics,
                 contract=contract,
             )
-            if not registry.has_model("1.0.0"):
+            if not registry.has_model(ACTIVE_MODEL_VERSION):
                 raise RuntimeError("Model đã được lưu nhưng không thể xác minh trạng thái registry.")
 
             self.succeeded.emit(
                 {
-                    "version": "1.0.0",
+                    "version": ACTIVE_MODEL_VERSION,
                     "metrics": metrics,
                     "train_rows": len(train_data),
                     "test_rows": len(test_data),
@@ -641,7 +643,7 @@ class MainWindow(QMainWindow):
         self.training_progress.setVisible(False)
         train_layout.addWidget(self.training_progress)
         train_actions = QHBoxLayout()
-        self.btn_train_model = self._primary_button("Huấn luyện model v1.0.0", self._handle_train_model, "warning")
+        self.btn_train_model = self._primary_button("Huấn luyện XGBoost", self._handle_train_model, "warning")
         self.btn_train_model.setMinimumHeight(40)
         train_actions.addWidget(self.btn_train_model)
         train_actions.addStretch(1)
@@ -760,7 +762,7 @@ class MainWindow(QMainWindow):
             self.lbl_dataset_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         ready = self._is_model_ready()
         if ready:
-            self.lbl_model_badge.setText("Model v1.0.0 sẵn sàng")
+            self.lbl_model_badge.setText(f"XGBoost {ACTIVE_MODEL_VERSION} sẵn sàng")
             self.lbl_model_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         else:
             self.lbl_model_badge.setText("Model chưa sẵn sàng")
@@ -769,7 +771,7 @@ class MainWindow(QMainWindow):
     def _is_model_ready(self) -> bool:
         try:
             checker = getattr(self.prediction_service, "is_model_ready", None)
-            return bool(checker("1.0.0")) if callable(checker) else False
+            return bool(checker(ACTIVE_MODEL_VERSION)) if callable(checker) else False
         except Exception:
             logging.exception("Unable to check model readiness")
             return False
@@ -1203,13 +1205,13 @@ class MainWindow(QMainWindow):
             QApplication.processEvents()
             results = self.prediction_service.predict_student_results(
                 self.current_df.copy(deep=True),
-                model_version="1.0.0",
+                model_version=ACTIVE_MODEL_VERSION,
                 course_profile_id=profile_id,
             )
             self.prediction_df = results.copy(deep=True)
             self._populate_table(self.table_predict, self.prediction_df)
             self.lbl_prediction_status.setText(
-                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng model v1.0.0. Kết quả là ước lượng, không phải điểm cuối kỳ thực tế."
+                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng XGBoost {ACTIVE_MODEL_VERSION}. Kết quả là ước lượng, không phải điểm cuối kỳ thực tế."
             )
             self._refresh_report_options()
             self._update_dashboard()
@@ -1283,9 +1285,9 @@ class MainWindow(QMainWindow):
         ready = self._is_model_ready()
         if hasattr(self, "lbl_model_page_status"):
             if ready:
-                self.lbl_model_page_status.setText("Model v1.0.0 đã sẵn sàng")
+                self.lbl_model_page_status.setText(f"XGBoost {ACTIVE_MODEL_VERSION} đã sẵn sàng")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#027A48;")
-                self.lbl_model_details.setText("Registry xác nhận có metadata và artifact của model v1.0.0.")
+                self.lbl_model_details.setText(f"Registry xác nhận có metadata và artifact của XGBoost {ACTIVE_MODEL_VERSION}.")
             else:
                 self.lbl_model_page_status.setText("Chưa có model dùng được")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B42318;")

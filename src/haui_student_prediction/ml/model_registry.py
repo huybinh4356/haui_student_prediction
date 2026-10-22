@@ -8,6 +8,9 @@ from haui_student_prediction.ml.train_regressor import ModelMetrics
 from haui_student_prediction.features.feature_contract import FeatureContract
 
 
+ACTIVE_MODEL_VERSION = "xgboost-1.0.0"
+
+
 class ModelRegistry:
     """Single source of truth for trained model artifacts + metadata.
 
