@@ -78,13 +78,16 @@ An import is not reported as successful if writing the validated dataset to SQLi
 
 ## Training model
 
-When historical data with `actual_final_exam_score` is available:
+Prediction data and model-training data are separate.
 
-1. Import the validated dataset.
-2. Use the model training workflow in the UI or supported script.
-3. The application trains the configured XGBoost regressor and evaluates it on a held-out test set.
-4. Model artifacts are saved to `models/artifacts/`.
-5. Registry metadata is saved to `models/registry.json`.
+1. Import the current student dataset without any final-exam score column.
+2. Open **Models** and select **Train XGBoost**.
+3. Choose a separate historical CSV/Excel file containing a final-exam label. The loader converts that historical label to `target_final_exam_score`; it is used only as the supervised-learning target.
+4. The XGBoost pipeline learns from available pre-exam features such as TX1/TX2, midterm, absence, LMS participation, interaction, stress, motivation, work status, major, and course ID when supported by the data.
+5. The model is evaluated on a held-out test set with MAE, RMSE, and R², then registered if training completes successfully.
+6. For current students, the system predicts the final-exam score, calculates the expected course total using the configured assessment profile, and evaluates academic risk.
+
+The historical label must never be used as an input feature or included in the current prediction dataset. The amount and diversity of real historical data affect model reliability.
 
 ## Tests
 
@@ -133,7 +136,7 @@ haui_student_prediction/
 ## Known limitations
 
 - Dataset persistence currently stores the latest imported dataset in the `current_session` table; a new successful import replaces that table.
-- Model training requires historical data with `actual_final_exam_score`.
+- Model training requires a separate historical dataset with a target label; the current prediction dataset must not contain that label.
 - Score scale and risk thresholds should be confirmed against the applicable HaUI grading policy and historical data.
 
 Do not commit real student data or database files to version control.

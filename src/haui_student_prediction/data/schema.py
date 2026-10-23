@@ -15,7 +15,6 @@ class StudentRecord:
     stress_score: Optional[float] = None
     motivation_score: Optional[float] = None
     works_part_time: Optional[bool] = None
-    actual_final_exam_score: Optional[float] = None
     date_of_birth: Optional[str] = None
     birth_year: Optional[int] = None
     hometown: Optional[str] = None

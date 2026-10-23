@@ -32,7 +32,7 @@
 | tx1_score | float | 0-10 (to confirm) | Feature |
 | tx2_score | float/null | 0-10 (to confirm) | Feature if has_tx2=True |
 | midterm_score | float | 0-10 (to confirm) | Feature |
-| actual_final_exam_score | float | 0-10 (to confirm) | **Target only** |
+| target_final_exam_score | float | 0-10 (confirm from source) | Historical training target only; never in prediction input |
 
 ## Attendance & LMS
 

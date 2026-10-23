@@ -5,7 +5,7 @@ from typing import Dict, List, Any
 # Canonical numeric columns that must be coerced to float.
 # NOTE on score scales (requirement #4):
 #   - absence_percentage / lms_learning_percentage are percentages -> [0, 100].
-#   - tx1_score / tx2_score / midterm_score / actual_final_exam_score are course
+#   - tx1_score / tx2_score / midterm_score / target_final_exam_score are course
 #     scores. The risk module (_normalize_academic in risk_calculator.py) computes
 #     (10.0 - score) * 10, which implies a 0-10 scale, but there is NO explicit
 #     configuration file declaring this scale. We therefore DO NOT enforce an
@@ -18,7 +18,7 @@ NUMERIC_COLUMNS = [
     "tx1_score",
     "tx2_score",
     "midterm_score",
-    "actual_final_exam_score",
+    "target_final_exam_score",
     "stress_score",
     "motivation_score",
     "interaction_score",
