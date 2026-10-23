@@ -3,7 +3,7 @@ import pandas as pd
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-from storage.sqlite_database import SQLiteDatabase
+from haui_student_prediction.storage.sqlite_database import SQLiteDatabase
 
 def init_database():
     db = SQLiteDatabase("data/student_data.db")

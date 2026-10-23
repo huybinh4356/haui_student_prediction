@@ -27,6 +27,7 @@ src/haui_student_prediction/ml/__init__.py
 src/haui_student_prediction/ml/model_registry.py
 src/haui_student_prediction/ml/preprocessing.py
 src/haui_student_prediction/ml/train_regressor.py
+src/haui_student_prediction/ml/xgboost_regressor.py
 src/haui_student_prediction/risk/__init__.py
 src/haui_student_prediction/risk/risk_calculator.py
 src/haui_student_prediction/scoring/__init__.py
@@ -36,9 +37,11 @@ src/haui_student_prediction/services/dataset_service.py
 src/haui_student_prediction/services/prediction_service.py
 src/haui_student_prediction/services/report_service.py
 src/haui_student_prediction/services/risk_prediction_service.py
+src/haui_student_prediction/services/risk_service.py
 src/haui_student_prediction/storage/__init__.py
 src/haui_student_prediction/storage/dataset_repository.py
-src/haui_student_prediction/storage/h2_database.py
+src/haui_student_prediction/storage/sqlite_database.py
 src/haui_student_prediction/ui/__init__.py
 src/haui_student_prediction/ui/main_window.py
+src/haui_student_prediction/ui/theme.py
 src/haui_student_prediction/ui/views/__init__.py
