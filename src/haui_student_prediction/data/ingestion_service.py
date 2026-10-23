@@ -3,6 +3,7 @@ from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from haui_student_prediction.data.cleaning import DataCleaner, PERCENTAGE_COLUMNS
+from haui_student_prediction.data.column_mapping import is_training_target_column
 from haui_student_prediction.data.validator import DataValidator
 
 @dataclass
@@ -51,6 +52,13 @@ class IngestionService:
         else:
             raise ValueError(f"Unsupported file format: '{suffix}'. Supported: .csv, .xls, .xlsx")
 
+        excluded_target_columns = [
+            column for column in df_raw.columns
+            if is_training_target_column(column)
+        ]
+        if excluded_target_columns:
+            df_raw = df_raw.drop(columns=excluded_target_columns)
+
         df_mapped = self.cleaner.rename_columns(df_raw)
         df_typed = self.cleaner.convert_types(df_mapped)
         df_final = self.cleaner.determine_tx2_applicability(df_typed, courses_with_tx2)
@@ -71,7 +79,6 @@ class IngestionService:
         score_cols = [
             c for c in [
                 "tx1_score", "tx2_score", "midterm_score",
-                "actual_final_exam_score",
             ]
             if c in df_final.columns
         ]
@@ -109,5 +116,15 @@ class IngestionService:
             errors=all_hard_errors,
             missing_columns=missing_cols,
             duplicate_indices=[int(i) for i in duplicate_indices],
-            warnings=score_notes,
+            warnings=[
+                *score_notes,
+                *[
+                    {
+                        "column": str(column),
+                        "note": "Nhãn điểm lịch sử đã được loại khỏi dữ liệu sinh viên dùng để dự đoán.",
+                        "kind": "training_target_excluded",
+                    }
+                    for column in excluded_target_columns
+                ],
+            ],
         )

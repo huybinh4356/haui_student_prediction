@@ -248,3 +248,21 @@ def test_result_consistency_no_success_returns_none_data(service, tmp_path):
     assert isinstance(res.duplicate_indices, list)
     # missing_columns present and typed list[str]
     assert isinstance(res.missing_columns, list)
+
+
+
+def test_historical_target_column_is_removed_from_prediction_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm thi"] = "9.0"
+    path = _write_csv(tmp_path, "prediction_input.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data is not None
+    assert "Điểm thi" not in result.data.columns
+    assert "target_final_exam_score" not in result.data.columns
+    assert any(
+        warning.get("kind") == "training_target_excluded"
+        for warning in result.warnings
+    )

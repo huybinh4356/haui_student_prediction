@@ -324,6 +324,7 @@ def test_prediction_service_predict_normal(registry, scoring_service, contract):
     result = svc.predict_student_results(df_test, "1.0.0", "no_tx2")
     assert "predicted_final_exam_score" in result.columns
     assert "predicted_course_score" in result.columns
+    assert "target_final_exam_score" not in result.columns
     assert len(result) == 5
     # Predicted scores must be finite numbers
     assert result["predicted_final_exam_score"].notna().all()

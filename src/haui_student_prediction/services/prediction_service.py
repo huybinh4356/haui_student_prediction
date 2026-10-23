@@ -4,6 +4,7 @@ from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION, Mode
 from haui_student_prediction.scoring.final_course_score import ScoringService
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
+from haui_student_prediction.data.column_mapping import is_training_target_column
 
 
 class PredictionService:
@@ -55,10 +56,13 @@ class PredictionService:
             )
         contract = FeatureContract(**features_meta)
         builder = FeatureBuilder(contract)
+        excluded_columns = [
+            column for column in student_records.columns
+            if is_training_target_column(column)
+        ]
+        prediction_input = student_records.drop(columns=excluded_columns, errors="ignore").copy()
 
-        # --- Requirement #6: extract_features blocks target & identifiers ---
-        # Missing columns raise a clear ValueError here.
-        X_infer = builder.extract_features(student_records, is_training=False)
+        X_infer = builder.extract_features(prediction_input, is_training=False)
 
         raw_predictions = model.predict(X_infer)
         if isinstance(raw_predictions, tuple):
@@ -66,7 +70,7 @@ class PredictionService:
         else:
             predictions = raw_predictions
 
-        results_df = student_records.copy()
+        results_df = prediction_input.copy()
         results_df["predicted_final_exam_score"] = np.asarray(predictions)
 
         # --- Course score computation (unchanged logic) ---

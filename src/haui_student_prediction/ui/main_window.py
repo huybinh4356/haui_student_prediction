@@ -84,9 +84,9 @@ class _TrainingWorker(QThread):
             from haui_student_prediction.ml.model_registry import ModelRegistry
             from haui_student_prediction.ml.xgboost_regressor import train_xgboost_and_evaluate
 
-            target_column = "actual_final_exam_score"
+            target_column = "target_final_exam_score"
             if target_column not in self.dataframe.columns:
-                raise ValueError("Dữ liệu không có cột actual_final_exam_score.")
+                raise ValueError("Dữ liệu không có cột target_final_exam_score.")
 
             data = self.dataframe.copy(deep=True)
             target = pd.to_numeric(data[target_column], errors="coerce")
@@ -94,9 +94,9 @@ class _TrainingWorker(QThread):
             data = data.loc[finite_target].copy()
             data[target_column] = target.loc[finite_target].astype(float)
 
-            if len(data) < 6:
+            if len(data) < 10:
                 raise ValueError(
-                    f"Chỉ có {len(data)} bản ghi có điểm cuối kỳ hợp lệ. Cần ít nhất 6 bản ghi để tạo tập huấn luyện và kiểm thử sơ bộ."
+                    f"Chỉ có {len(data)} bản ghi huấn luyện hợp lệ. Cần tối thiểu 10 bản ghi để có thể chia tập huấn luyện và kiểm thử sơ bộ."
                 )
 
             numeric_candidates = [
@@ -109,16 +109,18 @@ class _TrainingWorker(QThread):
                 "stress_score",
                 "motivation_score",
             ]
-            categorical_candidates = ["works_part_time", "major"]
+            categorical_candidates = ["works_part_time", "major", "course_id"]
             numeric_features = [
                 column
                 for column in numeric_candidates
                 if column in data.columns and data[column].notna().any()
+                and data[column].nunique(dropna=True) > 1
             ]
             categorical_features = [
                 column
                 for column in categorical_candidates
                 if column in data.columns and data[column].notna().any()
+                and data[column].nunique(dropna=True) > 1
             ]
 
             if not numeric_features and not categorical_features:
@@ -202,6 +204,7 @@ class MainWindow(QMainWindow):
         self.prediction_df: pd.DataFrame | None = None
         self.risk_df: pd.DataFrame | None = None
         self.current_file_path: str | None = None
+        self.training_file_path: str | None = None
         self._training_worker: _TrainingWorker | None = None
         self._page_titles = [
             "Tổng quan",
@@ -633,8 +636,7 @@ class MainWindow(QMainWindow):
 
         train_frame, train_layout = self._surface("Huấn luyện từ dữ liệu lịch sử")
         explainer = QLabel(
-            "Cần dữ liệu lịch sử có cột actual_final_exam_score để làm target. "
-            "Mô hình chỉ được lưu khi quy trình huấn luyện và đánh giá thực sự hoàn tất."
+            "Dữ liệu sinh viên dùng để dự đoán không cần điểm cuối kỳ. Khi huấn luyện, hãy chọn riêng một tệp dữ liệu lịch sử đã có kết quả cuối kỳ; nhãn lịch sử chỉ được dùng để học và đánh giá mô hình, không đi vào đầu vào dự đoán."
         )
         explainer.setWordWrap(True)
         explainer.setStyleSheet("color:#475467;")
@@ -986,9 +988,6 @@ class MainWindow(QMainWindow):
             self.cb_eda_category.addItems(categorical_columns)
             self.cb_eda_x.addItems(numeric_columns)
             self.cb_eda_y.addItems(numeric_columns)
-            target_candidates = [column for column in numeric_columns if column == "actual_final_exam_score"]
-            if target_candidates:
-                self.cb_eda_y.setCurrentText(target_candidates[0])
         for selector in selectors:
             selector.blockSignals(False)
         self._update_eda_controls()
@@ -1125,30 +1124,44 @@ class MainWindow(QMainWindow):
         if self._training_worker is not None and self._training_worker.isRunning():
             QMessageBox.information(self, "Đang huấn luyện", "Một tác vụ huấn luyện đang chạy.")
             return
-        if self.current_df is None or self.current_df.empty:
-            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dữ liệu lịch sử trước khi huấn luyện.")
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn dữ liệu lịch sử để huấn luyện XGBoost",
+            "",
+            "Dữ liệu CSV/Excel (*.csv *.xlsx *.xls);;CSV (*.csv);;Excel (*.xlsx *.xls)",
+        )
+        if not file_path:
             return
-        if "actual_final_exam_score" not in self.current_df.columns:
+
+        try:
+            from haui_student_prediction.data.training_dataset import (
+                TARGET_COLUMN,
+                load_historical_training_dataset,
+            )
+
+            training_data = load_historical_training_dataset(file_path)
+            target = pd.to_numeric(training_data[TARGET_COLUMN], errors="coerce")
+            valid_rows = int((target.notna() & np.isfinite(target.astype(float))).sum())
+            if valid_rows < 10:
+                raise ValueError(
+                    f"Chỉ có {valid_rows} nhãn hợp lệ. Cần ít nhất 10 bản ghi lịch sử để huấn luyện."
+                )
+        except Exception as exc:
             QMessageBox.warning(
                 self,
-                "Thiếu nhãn huấn luyện",
-                "Dataset chưa có cột actual_final_exam_score. Cần điểm thi cuối kỳ thực tế để huấn luyện model. Không thể huấn luyện một mô hình dự đoán thật từ dữ liệu không có nhãn.",
+                "Không thể nạp dữ liệu huấn luyện",
+                self._user_error(exc),
             )
             return
-        target = pd.to_numeric(self.current_df["actual_final_exam_score"], errors="coerce")
-        valid_rows = int((target.notna() & np.isfinite(target.astype(float))).sum())
-        if valid_rows < 6:
-            QMessageBox.warning(
-                self,
-                "Dữ liệu huấn luyện chưa đủ",
-                f"Có {valid_rows} bản ghi với điểm thi cuối kỳ hợp lệ. Cần tối thiểu 6 bản ghi để chạy kiểm thử huấn luyện sơ bộ.",
-            )
-            return
+
+        self.training_file_path = file_path
         self.btn_train_model.setEnabled(False)
         self.btn_train_from_prediction.setEnabled(False)
         self.training_progress.setVisible(True)
-        self.lbl_training_status.setText("Đang kiểm tra dữ liệu, chia tập và huấn luyện…")
-        self._training_worker = _TrainingWorker(self.current_df, self)
+        self.lbl_training_status.setText(
+            f"Đã nạp {valid_rows:,} nhãn từ {Path(file_path).name}; đang chia tập và huấn luyện…"
+        )
+        self._training_worker = _TrainingWorker(training_data, self)
         self._training_worker.succeeded.connect(self._on_training_succeeded)
         self._training_worker.failed.connect(self._on_training_failed)
         self._training_worker.finished.connect(self._on_training_finished)
@@ -1196,7 +1209,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Mô hình chưa sẵn sàng",
-                "Chưa tìm thấy model đã huấn luyện và artifact hợp lệ. Mở trang Mô hình ML để kiểm tra hoặc huấn luyện từ dữ liệu lịch sử có điểm thi cuối kỳ thực tế.",
+                "Chưa tìm thấy model đã huấn luyện hợp lệ. Mở trang Mô hình ML và chọn một tệp dữ liệu lịch sử để huấn luyện trước khi dự đoán.",
             )
             return
         profile_id = self.cb_course_profile.currentData()
@@ -1209,10 +1222,52 @@ class MainWindow(QMainWindow):
                 model_version=ACTIVE_MODEL_VERSION,
                 course_profile_id=profile_id,
             )
+
+            risk_rows = []
+            for row_index, row in results.iterrows():
+                student_id = str(row.get("student_id", f"Bản ghi {row_index + 1}"))
+                try:
+                    risk_result = self.risk_service.evaluate_student_risk(row)
+                    override = bool(risk_result.is_override)
+                    risk_rows.append(
+                        {
+                            "student_id": student_id,
+                            "absence_status": "HOC_LAI" if override else self._absence_label(risk_result.absence_status),
+                            "weighted_score": round(float(risk_result.weighted_score), 2),
+                            "risk_category": self._risk_label(risk_result.risk_category),
+                            "override_triggered": override,
+                            "evaluation_status": "Đã đánh giá",
+                        }
+                    )
+                except Exception as exc:
+                    risk_rows.append(
+                        {
+                            "student_id": student_id,
+                            "absence_status": "Chưa xác định",
+                            "weighted_score": np.nan,
+                            "risk_category": "Chưa đủ dữ liệu",
+                            "override_triggered": False,
+                            "evaluation_status": self._user_error(exc),
+                        }
+                    )
+
+            self.risk_df = pd.DataFrame(risk_rows)
+            risk_columns = self.risk_df.drop(columns=["student_id"]).rename(
+                columns={
+                    "weighted_score": "academic_risk_score",
+                    "risk_category": "academic_risk_category",
+                    "override_triggered": "academic_risk_override",
+                    "evaluation_status": "academic_risk_status",
+                }
+            )
+            results = pd.concat(
+                [results.reset_index(drop=True), risk_columns.reset_index(drop=True)],
+                axis=1,
+            )
             self.prediction_df = results.copy(deep=True)
             self._populate_table(self.table_predict, self.prediction_df)
             self.lbl_prediction_status.setText(
-                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng XGBoost {ACTIVE_MODEL_VERSION}. Kết quả là ước lượng, không phải điểm cuối kỳ thực tế."
+                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng XGBoost {ACTIVE_MODEL_VERSION}. Bảng kết quả gồm điểm cuối kỳ dự kiến, điểm học phần dự kiến và đánh giá nguy cơ học vụ."
             )
             self._refresh_report_options()
             self._update_dashboard()
@@ -1293,8 +1348,7 @@ class MainWindow(QMainWindow):
                 self.lbl_model_page_status.setText("Chưa có model dùng được")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B42318;")
                 self.lbl_model_details.setText(
-                    "Không tìm thấy model được đăng ký đầy đủ hoặc artifact không tồn tại. "
-                    "Cần dữ liệu lịch sử có actual_final_exam_score để huấn luyện."
+                    "Không tìm thấy model đã huấn luyện hợp lệ. Chọn riêng một tệp dữ liệu lịch sử có nhãn khi bấm Huấn luyện XGBoost; tệp sinh viên cần dự đoán không cần điểm cuối kỳ."
                 )
         if hasattr(self, "card_model"):
             self.card_model.set_value(
@@ -1306,15 +1360,15 @@ class MainWindow(QMainWindow):
 
     def _refresh_model_page_info(self) -> None:
         self._update_model_status()
-        if self.current_df is None:
-            return
-        if "actual_final_exam_score" not in self.current_df.columns:
-            self.lbl_training_status.setText("Dataset hiện tại không có nhãn actual_final_exam_score.")
-        else:
-            target = pd.to_numeric(self.current_df["actual_final_exam_score"], errors="coerce")
-            valid = target.notna() & np.isfinite(target.astype(float))
+        if self.training_file_path and self._training_worker is None:
             self.lbl_training_status.setText(
-                f"Dataset có {int(valid.sum()):,} bản ghi với target điểm thi cuối kỳ hợp lệ trên tổng {len(self.current_df):,} bản ghi."
+                f"Tệp lịch sử huấn luyện đã chọn: {Path(self.training_file_path).name}. "
+                "Có thể chọn tệp khác để huấn luyện lại."
+            )
+        elif self.current_df is not None and self._training_worker is None:
+            self.lbl_training_status.setText(
+                "Dữ liệu sinh viên đang dự đoán được tách riêng, không cần cột điểm cuối kỳ. "
+                "Bấm Huấn luyện XGBoost để chọn tệp lịch sử có nhãn."
             )
 
     def _refresh_settings(self) -> None:
