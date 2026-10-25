@@ -5,7 +5,6 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -16,44 +15,8 @@ from haui_student_prediction.data.training_dataset import (
 )
 from haui_student_prediction.features.feature_contract import FeatureContract
 from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION, ModelRegistry
+from haui_student_prediction.ml.data_splitting import split_train_test
 from haui_student_prediction.ml.xgboost_regressor import train_xgboost_and_evaluate
-
-
-def split_train_test(
-    dataframe: pd.DataFrame,
-    test_size: float,
-    random_state: int,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    test_rows = min(max(2, int(round(len(dataframe) * test_size))), len(dataframe) - 3)
-    if test_rows < 2:
-        raise ValueError("Không đủ dữ liệu để tạo tập kiểm thử độc lập.")
-
-    if (
-        "student_id" in dataframe.columns
-        and dataframe["student_id"].nunique() >= 5
-        and dataframe["student_id"].duplicated().any()
-    ):
-        splitter = GroupShuffleSplit(
-            n_splits=1,
-            test_size=test_rows / len(dataframe),
-            random_state=random_state,
-        )
-        train_indices, test_indices = next(
-            splitter.split(
-                dataframe,
-                dataframe[TARGET_COLUMN],
-                groups=dataframe["student_id"].astype(str),
-            )
-        )
-        return dataframe.iloc[train_indices].copy(), dataframe.iloc[test_indices].copy()
-
-    train_data, test_data = train_test_split(
-        dataframe,
-        test_size=test_rows,
-        random_state=random_state,
-        shuffle=True,
-    )
-    return train_data.copy(), test_data.copy()
 
 
 def main() -> None:
