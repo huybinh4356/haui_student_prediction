@@ -24,6 +24,8 @@ Identifiers such as `student_id` and `full_name` are for display/grouping only, 
 
 XGBoost regression is the primary model in the application. Preprocessing stays inside the scikit-learn Pipeline and is fitted on training data only. Evaluation uses a held-out test set and reports MAE, RMSE, and R² when defined. These metrics are not reliable when the historical dataset is too small or unrepresentative.
 
+When historical records repeat the same `student_id`, train/test splitting groups records by normalized student ID so the same student cannot appear in both partitions. If there are not enough independent student groups, training stops with a clear error rather than falling back to a row-level split.
+
 The model learns feature relationships from historical examples. Manual feature percentages should not be imposed on XGBoost. The final-course score is a separate deterministic calculation using the course assessment profile.
 
 ## End-to-end outputs
