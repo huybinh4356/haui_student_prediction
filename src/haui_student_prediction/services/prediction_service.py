@@ -45,6 +45,31 @@ class PredictionService:
         if student_records is None or len(student_records) == 0:
             raise ValueError("Student records DataFrame is empty")
 
+        profile = self.scoring_service.profiles.get(course_profile_id)
+        if profile is None:
+            raise ValueError("Invalid profile_id")
+
+        if profile.has_tx2:
+            if "tx2_score" not in student_records.columns:
+                raise ValueError(
+                    "The selected course profile requires TX2, but the input has no tx2_score column."
+                )
+            tx2_values = pd.to_numeric(student_records["tx2_score"], errors="coerce")
+            valid_tx2 = tx2_values.notna() & np.isfinite(tx2_values.astype(float))
+            if not valid_tx2.all():
+                invalid_count = int((~valid_tx2).sum())
+                raise ValueError(
+                    "The selected course profile requires a valid TX2 score for every record; "
+                    f"{invalid_count} record(s) have missing or invalid TX2 scores."
+                )
+        elif "tx2_score" in student_records.columns:
+            tx2_values = pd.to_numeric(student_records["tx2_score"], errors="coerce")
+            if tx2_values.notna().any():
+                raise ValueError(
+                    "The input contains TX2 scores, but the selected profile is for courses "
+                    "without TX2. Select the profile with TX2 or separate the dataset by course."
+                )
+
         model, metadata = self.registry.load_model(model_version)
 
         # Reconstruct the contract stored with the model.
@@ -72,9 +97,6 @@ class PredictionService:
 
         results_df = prediction_input.copy()
         results_df["predicted_final_exam_score"] = np.asarray(predictions)
-
-        if course_profile_id not in self.scoring_service.profiles:
-            raise ValueError("Invalid profile_id")
 
         course_totals = []
         course_score_status = []

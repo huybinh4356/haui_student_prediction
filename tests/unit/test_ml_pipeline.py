@@ -489,3 +489,43 @@ def test_prediction_service_unavailable_after_artifact_deleted(
     assert not svc.is_model_ready("1.0.0")
     with pytest.raises(RuntimeError, match="not ready"):
         svc.predict_student_results(df_test, "1.0.0", "no_tx2")
+
+
+def test_registry_creates_missing_parent_directories(tmp_path):
+    registry_path = tmp_path / "new_root" / "models" / "registry.json"
+    artifacts_path = tmp_path / "new_root" / "models" / "artifacts"
+
+    registry = ModelRegistry(
+        registry_path=str(registry_path),
+        artifacts_dir=str(artifacts_path),
+    )
+
+    assert registry_path.exists()
+    assert registry._load_registry() == {}
+    assert artifacts_path.is_dir()
+
+
+def test_prediction_service_rejects_tx2_when_no_tx2_profile_is_selected(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    input_data = _make_test_df(n=5)
+    input_data["tx2_score"] = 6.0
+    service = PredictionService(registry, scoring_service)
+
+    with pytest.raises(ValueError, match="input contains TX2 scores"):
+        service.predict_student_results(input_data, "1.0.0", "no_tx2")
+
+
+def test_prediction_service_requires_tx2_for_tx2_profile(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    service = PredictionService(registry, scoring_service)
+
+    with pytest.raises(ValueError, match="requires TX2"):
+        service.predict_student_results(df_test, "1.0.0", "with_tx2")
