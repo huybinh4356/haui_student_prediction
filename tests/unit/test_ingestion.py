@@ -424,3 +424,22 @@ def test_historical_target_column_is_removed_from_prediction_import(service, tmp
         warning.get("kind") == "training_target_excluded"
         for warning in result.warnings
     )
+
+
+def test_pandas_na_is_treated_as_missing_not_as_a_conversion_error(cleaner):
+    dataframe = pd.DataFrame(
+        {
+            "student_id": [pd.NA],
+            "course_id": [pd.NA],
+            "semester": [pd.NA],
+            "works_part_time": [pd.NA],
+        }
+    )
+
+    result = cleaner.convert_types(cleaner.rename_columns(dataframe))
+
+    assert pd.isna(result.loc[0, "student_id"])
+    assert pd.isna(result.loc[0, "course_id"])
+    assert pd.isna(result.loc[0, "semester"])
+    assert pd.isna(result.loc[0, "works_part_time"])
+    assert cleaner.collect_conversion_errors() == []

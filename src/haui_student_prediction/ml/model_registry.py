@@ -23,6 +23,7 @@ class ModelRegistry:
     def __init__(self, registry_path: str, artifacts_dir: str):
         self.registry_path = Path(registry_path)
         self.artifacts_dir = Path(artifacts_dir)
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.registry_path.exists():

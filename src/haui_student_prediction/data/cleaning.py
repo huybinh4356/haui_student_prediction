@@ -37,11 +37,13 @@ _FALSE_TOKENS = {"false", "f", "no", "n", "0", "không", "khong", "sai"}
 def _is_blank(value: Any) -> bool:
     if value is None:
         return True
-    if isinstance(value, float) and pd.isna(value):
-        return True
-    if isinstance(value, str) and value.strip() == "":
-        return True
-    return False
+    if isinstance(value, str):
+        return value.strip() == ""
+    try:
+        missing = pd.isna(value)
+    except (TypeError, ValueError):
+        return False
+    return isinstance(missing, (bool, np.bool_)) and bool(missing)
 
 
 class DataCleaner:
