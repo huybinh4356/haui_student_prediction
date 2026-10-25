@@ -33,6 +33,8 @@ def load_config() -> AppConfig:
     else:
         load_dotenv()
 
+    base_dir = get_project_root()
+
     return AppConfig(
         env=os.getenv("APP_ENV", "development"),
         data_raw_dir=_resolve_path(
