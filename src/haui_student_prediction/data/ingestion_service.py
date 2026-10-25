@@ -74,8 +74,12 @@ class IngestionService:
 
         conversion_errors = self.cleaner.collect_conversion_errors()
 
+        duplicate_key_columns = ["student_id", "course_id", "semester"]
+        unavailable_duplicate_keys = [
+            column for column in duplicate_key_columns if column not in df_final.columns
+        ]
         duplicate_indices = self.validator.check_duplicates(
-            df_final, ["student_id", "course_id", "semester"]
+            df_final, duplicate_key_columns
         )
 
         # Score scale: no explicit config -> notes only (do not block).
@@ -121,6 +125,18 @@ class IngestionService:
             duplicate_indices=[int(i) for i in duplicate_indices],
             warnings=[
                 *score_notes,
+                *(
+                    [{
+                        "column": ",".join(unavailable_duplicate_keys),
+                        "note": (
+                            "Không thể kiểm tra trùng theo khóa đầy đủ "
+                            "(student_id, course_id, semester) vì file thiếu cột khóa. "
+                            "Bổ sung mã môn và học kỳ để tăng khả năng phát hiện bản ghi trùng."
+                        ),
+                        "kind": "duplicate_check_incomplete",
+                    }]
+                    if unavailable_duplicate_keys else []
+                ),
                 *[
                     {
                         "column": str(column),
