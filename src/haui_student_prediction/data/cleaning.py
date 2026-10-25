@@ -195,7 +195,9 @@ class DataCleaner:
                 for course_id in courses_with_tx2
                 if not _is_blank(course_id)
             }
-            df_clean["has_tx2"] = df_clean["course_id"].isin(normalized_tx2_courses).astype("boolean")
+            applicable = df_clean["course_id"].isin(normalized_tx2_courses)
+            applicable = applicable.mask(df_clean["course_id"].isna(), pd.NA)
+            df_clean["has_tx2"] = applicable.astype("boolean")
         elif "tx2_score" in df_clean.columns and "course_id" in df_clean.columns:
             course_has_tx2 = df_clean.groupby(
                 "course_id", dropna=False
