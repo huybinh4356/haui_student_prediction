@@ -40,24 +40,28 @@ def split_train_test(
                 )
 
             splitter = GroupShuffleSplit(
-                n_splits=1,
+                n_splits=32,
                 test_size=test_rows / len(dataframe),
                 random_state=random_state,
             )
-            train_indices, test_indices = next(
-                splitter.split(
-                    dataframe,
-                    groups=identifiers.astype(str),
-                )
-            )
-            train_data = dataframe.iloc[train_indices].copy()
-            test_data = dataframe.iloc[test_indices].copy()
+            selected_split = None
+            for train_indices, test_indices in splitter.split(
+                dataframe,
+                groups=identifiers.astype(str),
+            ):
+                if len(train_indices) >= 3 and len(test_indices) >= 2:
+                    selected_split = (train_indices, test_indices)
+                    break
 
-            if len(train_data) < 3 or len(test_data) < 2:
+            if selected_split is None:
                 raise ValueError(
                     "Không thể tạo tập train/test đủ lớn mà không tách cùng sinh viên "
                     "sang cả hai tập. Cần dữ liệu lịch sử đa dạng hơn."
                 )
+
+            train_indices, test_indices = selected_split
+            train_data = dataframe.iloc[train_indices].copy()
+            test_data = dataframe.iloc[test_indices].copy()
 
             train_students = set(train_data["student_id"].astype(str))
             test_students = set(test_data["student_id"].astype(str))
