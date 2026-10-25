@@ -262,6 +262,26 @@ def test_import_warns_when_duplicate_key_columns_are_missing(service, tmp_path):
     assert "semester" in warning["column"]
 
 
+def test_rows_with_incomplete_duplicate_keys_are_warned_not_false_duplicates(service, tmp_path):
+    rows = _valid_rows()
+    rows[1]["Mã SV"] = "SV01"
+    rows[1]["Mã môn"] = ""
+    rows[1]["Học kỳ"] = ""
+    rows[0]["Mã môn"] = "IT101"
+    rows[0]["Học kỳ"] = "2024.1"
+    path = _write_csv(tmp_path, "incomplete_duplicate_values.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.duplicate_indices == []
+    warning = next(
+        warning for warning in result.warnings
+        if warning.get("kind") == "duplicate_check_incomplete_values"
+    )
+    assert warning["rows_with_missing_key"] == 1
+
+
 # ---- 9. TX2 determination ---------------------------------------------------
 
 def test_tx2_determination(service, tmp_path):
