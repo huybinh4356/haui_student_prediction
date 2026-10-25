@@ -58,3 +58,17 @@ def test_unique_students_use_regular_train_test_split():
 
     assert len(train_data) == 16
     assert len(test_data) == 4
+
+def test_student_id_whitespace_and_case_variants_cannot_leak_between_splits():
+    dataframe = pd.DataFrame(
+        {
+            "student_id": ["SV001", " sv001 ", "sv002", "SV002", "SV003", "sv003"] * 4,
+            "target_final_exam_score": [float(index % 10) for index in range(24)],
+        }
+    )
+
+    train_data, test_data = split_train_test(dataframe, test_size=0.2, random_state=42)
+
+    normalize = lambda values: {str(value).strip().casefold() for value in values}
+    assert normalize(train_data["student_id"]).isdisjoint(normalize(test_data["student_id"]))
+
