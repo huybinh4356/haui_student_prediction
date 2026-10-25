@@ -336,7 +336,7 @@ def test_tx2_inference_when_course_mapping_is_empty(service, tmp_path):
     assert result.is_success
     data = result.data.set_index("student_id")
     assert bool(data.loc["SV01", "has_tx2"]) is True
-    assert bool(data.loc["SV02", "has_tx2"]) is False
+    assert pd.isna(data.loc["SV02", "has_tx2"])
 
 
 def test_tx2_inference_without_course_id(service, tmp_path):
@@ -350,7 +350,7 @@ def test_tx2_inference_without_course_id(service, tmp_path):
     assert result.is_success
     data = result.data.set_index("student_id")
     assert bool(data.loc["SV01", "has_tx2"]) is True
-    assert bool(data.loc["SV02", "has_tx2"]) is False
+    assert pd.isna(data.loc["SV02", "has_tx2"])
 
 
 # ---- 10. result consistency -------------------------------------------------
