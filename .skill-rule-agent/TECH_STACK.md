@@ -58,7 +58,7 @@
 2. Trích xuất đúng các đặc trưng theo `FeatureContract`.
 3. Huấn luyện và đánh giá XGBoost bằng dữ liệu đã chia tập; tiền xử lý chỉ được fit trên phần train trong bước đánh giá.
 4. Lưu pipeline và metadata qua `ModelRegistry`.
-5. Dự đoán điểm cuối kỳ bằng model được đăng ký với version `xgboost-1.0.0`.
+5. Dự đoán điểm cuối kỳ bằng model được đăng ký với version `xgboost-2.0.0`.
 6. Tính điểm tổng kết bằng `ScoringService`; không tạo điểm tổng kết độc lập khiến kết quả mâu thuẫn với công thức học phần.
 7. Tính nguy cơ học vụ bằng risk engine hiện tại. Quy tắc nghỉ học **trên 75%** kích hoạt override học vụ theo yêu cầu hiện tại của chủ dự án.
 
