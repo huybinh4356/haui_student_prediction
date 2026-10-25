@@ -154,6 +154,18 @@ def test_builder_missing_feature_is_nan_during_inference(builder):
     assert features["tx1_score"].isna().all()
 
 
+def test_preprocessor_handles_missing_categorical_feature_at_inference(builder):
+    preprocessor = build_preprocessing_pipeline(NUM_COLS, CAT_COLS)
+    train_features = builder.extract_features(_make_train_df(), is_training=True)
+    preprocessor.fit(train_features)
+
+    inference_data = _make_test_df().drop(columns=["works_part_time"])
+    inference_features = builder.extract_features(inference_data, is_training=False)
+    transformed = preprocessor.transform(inference_features)
+
+    assert transformed.shape[0] == len(inference_data)
+
+
 def test_builder_missing_target_raises(builder):
     df = _make_train_df().drop(columns=[TARGET])
     with pytest.raises(ValueError, match="Target column"):
