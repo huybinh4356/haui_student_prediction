@@ -77,18 +77,18 @@ class DataCleaner:
                 continue
             original = df_clean[col]
             converted = pd.Series(pd.to_numeric(original, errors="coerce"), index=df_clean.index)
-            # A cell is a conversion error iff: original non-empty AND converted NaN.
             not_blank_mask = original.apply(lambda v: not _is_blank(v)).astype(bool)
-            failed_mask = converted.isna().astype(bool) & not_blank_mask
+            non_finite_mask = converted.notna() & ~np.isfinite(converted.astype(float))
+            failed_mask = (converted.isna() & not_blank_mask) | non_finite_mask
             for idx in df_clean.index[failed_mask]:
                 self._conversion_errors.append({
                     "row": int(idx),
                     "column": col,
                     "value": str(original.loc[idx]),
-                    "error": f"Cannot convert value to number in column '{col}'",
+                    "error": f"Invalid numeric value in column '{col}'",
                     "kind": "numeric_conversion",
                 })
-            df_clean[col] = converted
+            df_clean[col] = converted.mask(non_finite_mask)
 
         if "works_part_time" in df_clean.columns:
             original = df_clean["works_part_time"]
