@@ -244,6 +244,24 @@ def test_valid_file_succeeds(service, tmp_path):
     assert bool(res.data["works_part_time"].iloc[1]) is True
 
 
+def test_import_warns_when_duplicate_key_columns_are_missing(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row.pop("Mã môn", None)
+        row.pop("Học kỳ", None)
+    path = _write_csv(tmp_path, "missing_duplicate_keys.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    warning = next(
+        warning for warning in result.warnings
+        if warning.get("kind") == "duplicate_check_incomplete"
+    )
+    assert "course_id" in warning["column"]
+    assert "semester" in warning["column"]
+
+
 # ---- 9. TX2 determination ---------------------------------------------------
 
 def test_tx2_determination(service, tmp_path):
