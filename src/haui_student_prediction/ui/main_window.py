@@ -78,10 +78,10 @@ class _TrainingWorker(QThread):
 
     def run(self) -> None:
         try:
-            from sklearn.model_selection import GroupShuffleSplit, train_test_split
             from haui_student_prediction.app_config import load_config
             from haui_student_prediction.features.feature_contract import FeatureContract
             from haui_student_prediction.ml.model_registry import ModelRegistry
+            from haui_student_prediction.ml.data_splitting import split_train_test
             from haui_student_prediction.ml.xgboost_regressor import train_xgboost_and_evaluate
 
             target_column = "target_final_exam_score"
@@ -132,30 +132,11 @@ class _TrainingWorker(QThread):
                 target_column=target_column,
             )
 
-            test_size = max(2, int(round(len(data) * 0.2)))
-            test_size = min(test_size, len(data) - 3)
-            if test_size < 2:
-                raise ValueError("Không thể tạo tập kiểm thử có ít nhất 2 bản ghi.")
-
-            if "student_id" in data.columns and data["student_id"].nunique() >= 5 and data["student_id"].duplicated().any():
-                splitter = GroupShuffleSplit(n_splits=1, test_size=test_size / len(data), random_state=42)
-                train_indices, test_indices = next(
-                    splitter.split(data, data[target_column], groups=data["student_id"].astype(str))
-                )
-                train_data = data.iloc[train_indices].copy()
-                test_data = data.iloc[test_indices].copy()
-            else:
-                train_data, test_data = train_test_split(
-                    data,
-                    test_size=test_size,
-                    random_state=42,
-                    shuffle=True,
-                )
-                train_data = train_data.copy()
-                test_data = test_data.copy()
-
-            if len(train_data) < 3 or len(test_data) < 2:
-                raise ValueError("Tập train/test không đủ kích thước sau khi chia dữ liệu.")
+            train_data, test_data = split_train_test(
+                data,
+                test_size=0.2,
+                random_state=42,
+            )
 
             model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
             dataset_hash = hashlib.sha256(
