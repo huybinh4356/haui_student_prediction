@@ -30,11 +30,18 @@ class DataValidator:
         return [col for col in required_columns if col not in df.columns]
 
     def check_duplicates(self, df: pd.DataFrame, subset: List[str]) -> List[int]:
-        """Return indices of all rows that participate in a duplicate group
-        (keep=False) on the given subset. Empty list if subset columns absent."""
+        """Return duplicate row indices only where every key field is present."""
         if not all(col in df.columns for col in subset):
             return []
-        duplicates = df[df.duplicated(subset=subset, keep=False)]
+
+        key_data = df[subset]
+        complete_mask = key_data.notna().all(axis=1)
+        for column in subset:
+            if key_data[column].dtype == object:
+                complete_mask &= key_data[column].astype(str).str.strip().ne("")
+
+        complete_data = df.loc[complete_mask]
+        duplicates = complete_data[complete_data.duplicated(subset=subset, keep=False)]
         return duplicates.index.tolist()
 
     def validate_score_scale(
