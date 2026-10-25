@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from typing import Dict, List, Any
 
+from haui_student_prediction.data.column_mapping import normalize_column_name
+
 # Canonical numeric columns that must be coerced to float.
 # NOTE on score scales (requirement #4):
 #   - absence_percentage / lms_learning_percentage are percentages -> [0, 100].
@@ -49,7 +51,32 @@ class DataCleaner:
         self._conversion_errors: List[Dict[str, Any]] = []
 
     def rename_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        return df.rename(columns=self.column_mapping)
+        normalized_mapping = {
+            normalize_column_name(source): target
+            for source, target in self.column_mapping.items()
+        }
+        renamed_columns = {
+            source: normalized_mapping.get(normalize_column_name(source), source)
+            for source in df.columns
+        }
+        mapped_targets = list(renamed_columns.values())
+        duplicates = sorted({
+            column for column in mapped_targets
+            if mapped_targets.count(column) > 1
+        })
+        if duplicates:
+            sources = {
+                target: [
+                    str(source)
+                    for source, mapped in renamed_columns.items()
+                    if mapped == target
+                ]
+                for target in duplicates
+            }
+            raise ValueError(
+                f"Multiple input columns map to the same field: {sources}"
+            )
+        return df.rename(columns=renamed_columns)
 
     def convert_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert columns to canonical types.
