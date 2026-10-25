@@ -498,7 +498,7 @@ Không nên làm giao diện cầu kỳ trước khi schema, công thức và ta
 | Thang stress/động lực/tương tác? | Lưu thang gốc, min/max, chiều tốt/xấu và mapping | Không thể đảo chiều hoặc chuẩn hóa đúng nếu chưa biết thang |   
 | Điểm học phần nào được xem là nguy cơ? | Đặt trong cấu hình sau khi xác minh cách đánh giá/nhãn lịch sử | Chưa có ngưỡng kết quả thấp do chủ dự án cung cấp |   
 | Nguy cơ tổng hợp được phân nhãn ở ngưỡng nào? | Tạm dùng 0–<20, 20–<40, 40–<60, 60–<80, 80–100 | Đây là ngưỡng prototype, cần hiệu chỉnh trên lịch sử |   
-| “Nghỉ >75% = học lại” áp dụng với mọi môn? | Giữ thành rule cấu hình, xác nhận phạm vi với dữ liệu/quy định áp dụng | Không hard-code giả định cho mọi loại học phần khi chưa xác minh |   
+| “Nghỉ >30% = học lại” áp dụng với mọi môn? | Giữ thành rule cấu hình, xác nhận phạm vi với dữ liệu/quy định áp dụng | Không hard-code giả định cho mọi loại học phần khi chưa xác minh |   
 | Có cần PostgreSQL ngay? | MVP nhập Excel/CSV; thiết kế repository để nâng cấp | Tránh tăng độ phức tạp trước khi có nhu cầu |   
 | Có đủ target lịch sử để train? | Kiểm tra trước P5 | Không target = không thể đánh giá supervised model một cách đúng đắn |   
    

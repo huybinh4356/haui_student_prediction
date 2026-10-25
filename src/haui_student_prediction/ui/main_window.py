@@ -765,7 +765,7 @@ class MainWindow(QMainWindow):
         if self.current_df is None:
             self.card_records.set_value("0", "Chưa có dataset", "blue")
             self.card_missing.set_value("—", "Chưa có dataset", "amber")
-            self.card_absence.set_value("—", "Ngưỡng cấu hình > 75%", "red")
+            self.card_absence.set_value("—", "Ngưỡng cấu hình > 30%", "red")
             self.card_risk_override_value = None
             self.dashboard_summary.setText("Chưa có dữ liệu được nạp vào phiên làm việc.")
             self._show_dashboard_placeholder("Nhập dữ liệu để hiển thị phân tích.")
@@ -939,7 +939,7 @@ class MainWindow(QMainWindow):
         ]
         if "absence_percentage" in dataframe.columns:
             values = pd.to_numeric(dataframe["absence_percentage"], errors="coerce")
-            lines.append(f"Bản ghi nghỉ học trên 75%: {int((values > 30).sum()):,}")
+            lines.append(f"Bản ghi nghỉ học trên 30%: {int((values > 30).sum()):,}")
         return "\n".join(lines)
 
     def _refresh_data_table(self) -> None:
