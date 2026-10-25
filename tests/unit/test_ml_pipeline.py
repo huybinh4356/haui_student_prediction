@@ -146,6 +146,14 @@ def test_builder_missing_feature_raises(builder):
         builder.extract_features(df, is_training=True)
 
 
+def test_builder_missing_feature_is_nan_during_inference(builder):
+    df = _make_test_df().drop(columns=["tx1_score"])
+    features = builder.extract_features(df, is_training=False)
+
+    assert "tx1_score" in features.columns
+    assert features["tx1_score"].isna().all()
+
+
 def test_builder_missing_target_raises(builder):
     df = _make_train_df().drop(columns=[TARGET])
     with pytest.raises(ValueError, match="Target column"):
