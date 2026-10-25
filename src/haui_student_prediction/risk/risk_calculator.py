@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+import math
 from typing import Tuple
 
 @dataclass
@@ -78,8 +79,49 @@ class RiskCalculator:
         motivation_max: float,
         work_risk_points: float = 50.0
     ) -> RiskResult:
+        inputs = {
+            "absence_pct": absence_pct,
+            "lms_pct": lms_pct,
+            "predicted_course_score": predicted_course_score,
+            "interaction": interaction,
+            "interaction_max": interaction_max,
+            "stress": stress,
+            "stress_max": stress_max,
+            "motivation": motivation,
+            "motivation_max": motivation_max,
+            "work_risk_points": work_risk_points,
+        }
+        for name, value in inputs.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{name} must be a finite number") from exc
+            if not math.isfinite(number):
+                raise ValueError(f"{name} must be a finite number")
+            inputs[name] = number
+
+        absence_pct = inputs["absence_pct"]
+        lms_pct = inputs["lms_pct"]
+        predicted_course_score = inputs["predicted_course_score"]
+        interaction = inputs["interaction"]
+        interaction_max = inputs["interaction_max"]
+        stress = inputs["stress"]
+        stress_max = inputs["stress_max"]
+        motivation = inputs["motivation"]
+        motivation_max = inputs["motivation_max"]
+        work_risk_points = inputs["work_risk_points"]
+
         if not (0 <= absence_pct <= 100 and 0 <= lms_pct <= 100):
             raise ValueError("Percentages must be within 0 and 100")
+        if interaction_max <= 0 or stress_max <= 0 or motivation_max <= 0:
+            raise ValueError("Survey scale maxima must be greater than zero")
+        if not 0 <= work_risk_points <= 100:
+            raise ValueError("work_risk_points must be within 0 and 100")
+
+        if any(not math.isfinite(float(weight)) or float(weight) < 0 for weight in self.weights.values()):
+            raise ValueError("Risk weights must be finite and non-negative")
+        if abs(sum(float(weight) for weight in self.weights.values()) - 1.0) > 1e-6:
+            raise ValueError("Risk weights must sum to 1.0")
 
         absence_risk, status = self._normalize_absence(absence_pct)
         lms_risk = self._normalize_lms(lms_pct)
