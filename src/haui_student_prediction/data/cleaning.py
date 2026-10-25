@@ -55,20 +55,20 @@ class DataCleaner:
             normalize_column_name(source): target
             for source, target in self.column_mapping.items()
         }
-        renamed_columns = {
-            source: normalized_mapping.get(normalize_column_name(source), source)
-            for source in df.columns
-        }
-        mapped_targets = list(renamed_columns.values())
+        original_columns = list(df.columns)
+        renamed_columns = [
+            normalized_mapping.get(normalize_column_name(source), source)
+            for source in original_columns
+        ]
         duplicates = sorted({
-            column for column in mapped_targets
-            if mapped_targets.count(column) > 1
+            column for column in renamed_columns
+            if renamed_columns.count(column) > 1
         })
         if duplicates:
             sources = {
                 target: [
                     str(source)
-                    for source, mapped in renamed_columns.items()
+                    for source, mapped in zip(original_columns, renamed_columns)
                     if mapped == target
                 ]
                 for target in duplicates
@@ -76,7 +76,7 @@ class DataCleaner:
             raise ValueError(
                 f"Multiple input columns map to the same field: {sources}"
             )
-        return df.rename(columns=renamed_columns)
+        return df.set_axis(renamed_columns, axis="columns")
 
     def convert_types(self, df: pd.DataFrame) -> pd.DataFrame:
         """Convert columns to canonical types.
