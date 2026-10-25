@@ -73,24 +73,32 @@ class PredictionService:
         results_df = prediction_input.copy()
         results_df["predicted_final_exam_score"] = np.asarray(predictions)
 
-        # --- Course score computation (unchanged logic) ---
+        if course_profile_id not in self.scoring_service.profiles:
+            raise ValueError("Invalid profile_id")
+
         course_totals = []
+        course_score_status = []
         for _, row in results_df.iterrows():
-            tx1 = float(row["tx1_score"])
-            midterm = float(row["midterm_score"])
-            tx2 = row.get("tx2_score", None)
-            pred_final = float(row["predicted_final_exam_score"])
+            try:
+                tx1 = row.get("tx1_score")
+                midterm = row.get("midterm_score")
+                tx2 = row.get("tx2_score")
+                pred_final = row.get("predicted_final_exam_score")
+                tx2_val = float(tx2) if pd.notna(tx2) else None
 
-            tx2_val = float(tx2) if pd.notna(tx2) else None
-
-            course_total = self.scoring_service.calculate_score(
-                profile_id=course_profile_id,
-                tx1=tx1,
-                midterm=midterm,
-                predicted_final=pred_final,
-                tx2=tx2_val,
-            )
-            course_totals.append(course_total)
+                course_total = self.scoring_service.calculate_score(
+                    profile_id=course_profile_id,
+                    tx1=tx1,
+                    midterm=midterm,
+                    predicted_final=pred_final,
+                    tx2=tx2_val,
+                )
+                course_totals.append(course_total)
+                course_score_status.append("Đã tính")
+            except (KeyError, TypeError, ValueError) as exc:
+                course_totals.append(np.nan)
+                course_score_status.append(f"Chưa tính được điểm học phần: {exc}")
 
         results_df["predicted_course_score"] = course_totals
+        results_df["course_score_status"] = course_score_status
         return results_df
