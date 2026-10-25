@@ -208,7 +208,13 @@ class DataCleaner:
             known_course_scores = df_clean.loc[has_course_id].groupby(
                 "course_id"
             )["tx2_score"].transform(lambda values: values.notna().any())
-            applicable.loc[has_course_id] = known_course_scores.astype("boolean")
+            known_course_applicability = pd.Series(
+                pd.NA,
+                index=known_course_scores.index,
+                dtype="boolean",
+            )
+            known_course_applicability.loc[known_course_scores] = True
+            applicable.loc[has_course_id] = known_course_applicability
             missing_course_id_with_score = (~has_course_id) & df_clean["tx2_score"].notna()
             applicable.loc[missing_course_id_with_score] = True
             df_clean["has_tx2"] = applicable
