@@ -353,6 +353,30 @@ def test_tx2_inference_without_course_id(service, tmp_path):
     assert pd.isna(data.loc["SV02", "has_tx2"])
 
 
+def test_missing_course_id_remains_unknown_with_explicit_tx2_mapping(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row["Mã môn"] = ""
+    path = _write_csv(tmp_path, "tx2_missing_course_id.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data["has_tx2"].isna().all()
+
+
+def test_missing_tx2_column_does_not_imply_no_tx2(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row.pop("Điểm TX2", None)
+    path = _write_csv(tmp_path, "tx2_column_missing.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    assert result.data["has_tx2"].isna().all()
+
+
 # ---- 10. result consistency -------------------------------------------------
 
 def test_result_consistency_no_success_returns_none_data(service, tmp_path):
