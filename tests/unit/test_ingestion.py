@@ -128,6 +128,18 @@ def test_non_numeric_value_blocks(service, tmp_path):
     assert conv[0]["row"] == 0
 
 
+def test_infinite_numeric_value_blocks(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm TX1"] = "inf"
+    path = _write_csv(tmp_path, "infinite.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    errors = [error for error in result.errors if error.get("kind") == "numeric_conversion"]
+    assert any(error["column"] == "tx1_score" and error["row"] == 0 for error in errors)
+
+
 def test_empty_cell_is_legitimate_missing(service, tmp_path):
     """An empty cell must become NaN, NOT 0, and must NOT block success."""
     rows = _valid_rows()
