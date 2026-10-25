@@ -35,16 +35,15 @@ class FeatureBuilder:
                      and c != self.contract.target_column]
 
         missing_features = [c for c in safe_cols if c not in df.columns]
-        if missing_features:
+        if is_training and missing_features:
             raise ValueError(f"Missing required feature columns: {missing_features}")
 
-        if is_training:
-            if self.contract.target_column not in df.columns:
-                raise ValueError(
-                    f"Target column '{self.contract.target_column}' is missing for training"
-                )
+        if is_training and self.contract.target_column not in df.columns:
+            raise ValueError(
+                f"Target column '{self.contract.target_column}' is missing for training"
+            )
 
-        X = df[safe_cols].copy()
+        X = df.reindex(columns=safe_cols).copy()
 
         # sklearn's SimpleImputer/OneHotEncoder do not accept bool dtype; cast
         # categorical columns to string/object so they are treated as
