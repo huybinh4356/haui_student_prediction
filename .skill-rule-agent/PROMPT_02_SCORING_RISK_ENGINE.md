@@ -114,7 +114,7 @@ Không chỉ trả một chuỗi nhãn. Không đưa logic UI vào risk engine.
 - Tổng trọng số profile bằng 1.
 - Thiếu TX2 ở profile B không chuyển sang A.
 - TX2 không áp dụng ở profile A vẫn tính được.
-- Các boundary absence: `0`, `4.99`, `5`, `9.99`, `10`, `19.99`, `20`, `30`, `30.01`, `31`, `100`.
+- Các boundary absence: `0`, `4.99`, `5`, `9.99`, `10`, `19.99`, `20`, `74.99`, `75`, `75.01`, `76`, `100`.
 - Validation `-0.01`, `100.01`.
 - Weighted risk theo bộ input biết trước.
 - Weights sum 100%; component risk bounds; total risk bounds.
