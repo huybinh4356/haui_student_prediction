@@ -35,3 +35,19 @@ def test_non_finite_component_is_rejected():
 
     with pytest.raises(ValueError, match="finite number"):
         service.calculate_score("no_tx2", tx1=float("nan"), midterm=7.0, predicted_final=9.0)
+
+
+
+@pytest.mark.parametrize(
+    "profile",
+    [
+        CourseProfile(float("nan"), 0.0, 0.2, 0.8, False),
+        CourseProfile(-0.1, 0.0, 0.5, 0.6, False),
+        CourseProfile(0.2, 0.1, 0.2, 0.5, False),
+    ],
+)
+def test_invalid_profile_weights_are_rejected(profile):
+    service = ScoringService({"profile": profile})
+
+    with pytest.raises(ValueError):
+        service.calculate_score("profile", tx1=7.0, midterm=7.0, predicted_final=8.0)
