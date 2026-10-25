@@ -365,6 +365,20 @@ def test_missing_course_id_remains_unknown_with_explicit_tx2_mapping(service, tm
     assert result.data["has_tx2"].isna().all()
 
 
+def test_missing_course_ids_do_not_share_tx2_inference_group(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row["Mã môn"] = ""
+    path = _write_csv(tmp_path, "tx2_missing_course_ids_inferred.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    data = result.data.set_index("student_id")
+    assert bool(data.loc["SV01", "has_tx2"]) is True
+    assert pd.isna(data.loc["SV02", "has_tx2"])
+
+
 def test_missing_tx2_column_does_not_imply_no_tx2(service, tmp_path):
     rows = _valid_rows()
     for row in rows:
