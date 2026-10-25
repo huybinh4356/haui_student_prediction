@@ -16,7 +16,7 @@ class RiskPredictionService:
         motivation = self._require_float(student_record, "motivation_score")
         work_status = self._parse_bool(student_record, "works_part_time")
 
-        work_points = 50.0 if work_status else 0.0
+        work_points = 50.0
 
         return self.calculator.calculate_risk(
             absence_pct=absence,
@@ -33,20 +33,25 @@ class RiskPredictionService:
 
     def _require_float(self, row: pd.Series, col: str) -> float:
         val = row.get(col)
-        if val is None or (isinstance(val, float) and np.isnan(val)):
+        if val is None or pd.isna(val):
             raise ValueError(f"Missing required field '{col}' for risk calculation")
         try:
-            return float(val)
+            number = float(val)
         except (TypeError, ValueError) as e:
             raise ValueError(f"Field '{col}' cannot be converted to number: {val!r}") from e
+        if not np.isfinite(number):
+            raise ValueError(f"Field '{col}' must be finite for risk calculation")
+        return number
 
     def _parse_bool(self, row: pd.Series, col: str) -> bool:
         val = row.get(col)
-        if val is None or (isinstance(val, float) and np.isnan(val)):
+        if val is None or pd.isna(val):
             raise ValueError(f"Missing required field '{col}' for risk calculation")
         if isinstance(val, bool):
             return val
         if isinstance(val, (int, float)):
+            if not np.isfinite(float(val)):
+                raise ValueError(f"Field '{col}' has unrecognised boolean value: {val!r}")
             return bool(val)
         s = str(val).strip().lower()
         if s in {"true", "1", "yes", "có", "co", "đúng", "dung"}:
