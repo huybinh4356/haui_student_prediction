@@ -95,13 +95,13 @@ Mỗi thành phần phải được chuẩn hóa về thang nguy cơ 0–100 tr�
 
 Ngưỡng nghỉ học theo yêu cầu dự án:
 
-- `absence_percentage > 75`: bật override `HOC_LAI` theo quy tắc cấu hình dự án.
-- `20 <= absence_percentage <= 75`: nguy cơ cao.
+- `absence_percentage > 30`: bật override `HOC_LAI` theo quy tắc cấu hình dự án.
+- `20 <= absence_percentage <= 30`: nguy cơ cao.
 - `10 <= absence_percentage < 20`: nguy cơ trung bình.
 - `5 <= absence_percentage < 10`: nguy cơ thấp.
 - `0 <= absence_percentage < 5`: nguy cơ rất thấp.
 
-Điều kiện là **trên 75%**, không phải lớn hơn hoặc bằng 30%. Trạng thái override độc lập với weighted score; yếu tố tích cực khác không được hủy override. Không gọi đây là quy định chính thức áp dụng mọi học phần nếu chưa có tài liệu HaUI tương ứng.
+Điều kiện là **trên 30%**, không phải lớn hơn hoặc bằng 30%. Trạng thái override độc lập với weighted score; yếu tố tích cực khác không được hủy override. Không gọi đây là quy định chính thức áp dụng mọi học phần nếu chưa có tài liệu HaUI tương ứng.
 
 Tỷ lệ LMS được lấy trực tiếp, không tính lại. Giả sử phần trăm càng cao thì mức tham gia càng cao, các ngưỡng khởi tạo là:
 
