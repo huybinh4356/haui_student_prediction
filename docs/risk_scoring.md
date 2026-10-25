@@ -8,13 +8,13 @@ The MVP uses a weighted rule-based system, not an ML classifier. Risk scores are
 
 | absence_percentage | Status |
 |-------------------:|--------|
-| > 75% | `override_triggered = True`, status "REPEAT_REQUIRED" |
-| 20-75% | High risk |
+| > 30% | `override_triggered = True`, status "REPEAT_REQUIRED" |
+| 20-30% | High risk |
 | 10-<20% | Medium risk |
 | 5-<10% | Low risk |
 | 0-<5% | Very low risk |
 
-At exactly 75%, the attendance override does not trigger. Above 75%, the override is independent of other factors.
+At exactly 30%, the attendance override does not trigger. Above 30%, the override is independent of other factors.
 
 ## Component Weights (Total 100%)
 
