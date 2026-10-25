@@ -443,3 +443,11 @@ def test_pandas_na_is_treated_as_missing_not_as_a_conversion_error(cleaner):
     assert pd.isna(result.loc[0, "semester"])
     assert pd.isna(result.loc[0, "works_part_time"])
     assert cleaner.collect_conversion_errors() == []
+
+
+def test_midterm_exam_header_maps_to_midterm_score(cleaner):
+    dataframe = pd.DataFrame({"Điểm thi giữa kỳ": [7.5]})
+
+    result = cleaner.rename_columns(dataframe)
+
+    assert result.columns.tolist() == ["midterm_score"]

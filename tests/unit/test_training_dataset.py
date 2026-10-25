@@ -95,3 +95,16 @@ def test_training_dataset_rejects_infinite_target_values(tmp_path):
 
     with pytest.raises(ValueError, match="hữu hạn"):
         load_historical_training_dataset(str(source))
+
+
+@pytest.mark.parametrize(
+    "column_name",
+    [
+        "Điểm thi giữa kỳ",
+        "Điểm thi học phần",
+        "Điểm thi dự báo",
+        "Estimated final exam score",
+    ],
+)
+def test_non_final_exam_columns_are_not_historical_targets(column_name):
+    assert not is_training_target_column(column_name)

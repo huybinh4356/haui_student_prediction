@@ -21,7 +21,9 @@ def is_training_target_column(column_name: object) -> bool:
         "estimated",
         "dukien",
         "dudoan",
+        "dubao",
         "uocluong",
+        "uoctinh",
     )
     if any(marker in normalized for marker in prediction_markers):
         return False
@@ -44,11 +46,10 @@ def is_training_target_column(column_name: object) -> bool:
     if "final" in normalized and "exam" in normalized and "score" in normalized:
         return True
     return (
-        "diemthi" in normalized
+        "diemthicuoiky" in normalized
         or "diemcuoiky" in normalized
         or normalized.startswith("diemck")
     )
-
 
 def get_default_column_mapping() -> Dict[str, str]:
     return {
@@ -99,6 +100,7 @@ def get_default_column_mapping() -> Dict[str, str]:
         "tx2_score": "tx2_score",
         "Điểm GK": "midterm_score",
         "Điểm giữa kỳ": "midterm_score",
+        "Điểm thi giữa kỳ": "midterm_score",
         "Giữa kỳ": "midterm_score",
         "Midterm Score": "midterm_score",
         "midterm_score": "midterm_score",
