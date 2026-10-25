@@ -14,7 +14,7 @@ class RiskPredictionService:
         interaction = self._require_float(student_record, "interaction_score")
         stress = self._require_float(student_record, "stress_score")
         motivation = self._require_float(student_record, "motivation_score")
-        work_status = self._parse_bool(student_record, "works_part_time")
+        self._parse_bool(student_record, "works_part_time")
 
         work_points = 50.0
 
