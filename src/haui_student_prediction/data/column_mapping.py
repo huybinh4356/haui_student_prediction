@@ -37,7 +37,6 @@ def is_training_target_column(column_name: object) -> bool:
         "diemcuoiky",
         "diemck",
         "diemthucte",
-        "diemthithucte",
         "diemthicuoikythucte",
         "diemcuoikythucte",
         "diemckthucte",

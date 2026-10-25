@@ -18,16 +18,16 @@ def _calculate(calc, absence):
     )
 
 
-def test_absence_override_only_above_75_percent():
+def test_absence_override_only_above_30_percent():
     calc = RiskCalculator()
 
-    at_threshold = _calculate(calc, 75.0)
-    above_threshold = _calculate(calc, 76.0)
+    at_threshold = _calculate(calc, 30.0)
+    just_above_threshold = _calculate(calc, 30.01)
 
     assert at_threshold.is_override is False
     assert at_threshold.absence_status == "high"
-    assert above_threshold.is_override is True
-    assert above_threshold.absence_status == "REPEAT_REQUIRED"
+    assert just_above_threshold.is_override is True
+    assert just_above_threshold.absence_status == "REPEAT_REQUIRED"
 
 
 def test_weights_sum_to_one():

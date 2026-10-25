@@ -46,20 +46,20 @@ def test_part_time_status_uses_neutral_risk_mapping(service):
     assert missing.weighted_score == not_working.weighted_score
 
 
-def test_absence_no_override_at_75(service):
-    r = service.evaluate_student_risk(_row(absence_percentage=75))
+def test_absence_no_override_at_30(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=30))
     assert r.is_override is False
     assert r.absence_status == "high"
 
 
-def test_absence_override_at_76(service):
-    r = service.evaluate_student_risk(_row(absence_percentage=76))
+def test_absence_override_just_above_30(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=30.01))
     assert r.is_override is True
     assert r.absence_status == "REPEAT_REQUIRED"
 
 
-def test_absence_no_override_at_30(service):
-    r = service.evaluate_student_risk(_row(absence_percentage=30))
+def test_absence_no_override_below_30(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=29.99))
     assert r.is_override is False
 
 
