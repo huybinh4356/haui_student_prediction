@@ -51,6 +51,13 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
             f"Cột nhãn có giá trị không phải số tại các dòng: {rows}"
         )
 
+    non_finite = target.notna() & ~np.isfinite(target.astype(float))
+    if non_finite.any():
+        rows = [int(index) + 2 for index in source_target.index[non_finite][:8]]
+        raise ValueError(
+            f"Cột nhãn chứa giá trị không hữu hạn tại các dòng: {rows}"
+        )
+
     feature_data = raw.drop(columns=target_columns)
     cleaner = DataCleaner(get_default_column_mapping())
     feature_data = cleaner.rename_columns(feature_data)
