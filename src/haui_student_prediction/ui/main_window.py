@@ -843,6 +843,38 @@ class MainWindow(QMainWindow):
             logging.exception("Dashboard chart failed")
             self._show_dashboard_placeholder(f"Chưa thể tạo biểu đồ: {exc}")
 
+    def _sync_course_profile_from_dataset(self, dataframe: pd.DataFrame) -> None:
+        if "tx2_score" not in dataframe.columns:
+            profile_id = "no_tx2"
+        else:
+            tx2_values = pd.to_numeric(dataframe["tx2_score"], errors="coerce")
+            if tx2_values.empty or tx2_values.isna().all():
+                profile_id = "no_tx2"
+            elif tx2_values.notna().all():
+                profile_id = "with_tx2"
+            else:
+                self.lbl_prediction_notice.setText(
+                    "Dữ liệu có TX2 ở một số dòng nhưng thiếu ở dòng khác. "
+                    "Hãy tách file theo cấu hình học phần hoặc bổ sung điểm TX2 bị thiếu "
+                    "trước khi dự đoán để tránh tính sai điểm học phần."
+                )
+                return
+
+        index = self.cb_course_profile.findData(profile_id)
+        if index >= 0:
+            self.cb_course_profile.setCurrentIndex(index)
+
+        if profile_id == "with_tx2":
+            self.lbl_prediction_notice.setText(
+                "Đã tự chọn profile có TX2 vì tất cả bản ghi đều có điểm TX2. "
+                "Hãy xác nhận cấu hình này phù hợp với quy chế đánh giá của học phần."
+            )
+        else:
+            self.lbl_prediction_notice.setText(
+                "Đã tự chọn profile không TX2 vì dữ liệu không có điểm TX2. "
+                "Hãy xác nhận cấu hình này phù hợp với quy chế đánh giá của học phần."
+            )
+
     def _handle_import(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -885,6 +917,7 @@ class MainWindow(QMainWindow):
 
             self.current_df = result.data.copy(deep=True)
             self.current_file_path = file_path
+            self._sync_course_profile_from_dataset(self.current_df)
             self.prediction_df = None
             self.risk_df = None
             warnings = getattr(result, "warnings", []) or []
@@ -1204,6 +1237,18 @@ class MainWindow(QMainWindow):
         if self.current_df is None or self.current_df.empty:
             QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dataset trước khi dự đoán.")
             return
+        if "tx2_score" in self.current_df.columns:
+            tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
+            if tx2_values.notna().any() and tx2_values.isna().any():
+                QMessageBox.warning(
+                    self,
+                    "Dữ liệu TX2 chưa đồng nhất",
+                    "Một số bản ghi có TX2 nhưng một số bản ghi khác không có điểm TX2. "
+                    "Hãy tách dữ liệu theo cấu hình học phần hoặc xử lý các điểm TX2 bị thiếu "
+                    "trước khi dự đoán. Không thể áp dụng một công thức điểm học phần chính xác "
+                    "cho toàn bộ file ở trạng thái hiện tại.",
+                )
+                return
         if not self._is_model_ready():
             self._update_model_status()
             QMessageBox.warning(
