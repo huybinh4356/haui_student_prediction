@@ -50,8 +50,14 @@ def test_works_part_time_string_true(service):
     assert r.weighted_score >= 0
 
 
-def test_absence_override_at_31(service):
-    r = service.evaluate_student_risk(_row(absence_percentage=31))
+def test_absence_no_override_at_75(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=75))
+    assert r.is_override is False
+    assert r.absence_status == "high"
+
+
+def test_absence_override_at_76(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=76))
     assert r.is_override is True
     assert r.absence_status == "REPEAT_REQUIRED"
 
@@ -72,6 +78,8 @@ def test_absence_boundaries(service):
     assert r20.absence_status == "high"
     r30 = service.evaluate_student_risk(_row(absence_percentage=30))
     assert r30.absence_status == "high"
+    r75 = service.evaluate_student_risk(_row(absence_percentage=75))
+    assert r75.absence_status == "high"
 
 
 def test_lms_boundaries(service):
@@ -97,3 +105,11 @@ def test_weights_sum_to_one():
 def test_risk_score_in_range(service):
     r = service.evaluate_student_risk(_row())
     assert 0 <= r.weighted_score <= 100
+
+
+
+def test_part_time_status_uses_neutral_risk_mapping(service):
+    not_working = service.evaluate_student_risk(_row(works_part_time=False))
+    working = service.evaluate_student_risk(_row(works_part_time=True))
+
+    assert working.weighted_score == not_working.weighted_score
