@@ -848,9 +848,12 @@ class MainWindow(QMainWindow):
                     "trước khi dự đoán để tránh tính sai điểm học phần."
                 )
 
-        profile_index = self.cb_course_profile.findData(profile_id)
-        if profile_index >= 0:
-            self.cb_course_profile.setCurrentIndex(profile_index)
+        if profile_id is None:
+            self.cb_course_profile.setCurrentIndex(0)
+        else:
+            profile_index = self.cb_course_profile.findData(profile_id)
+            if profile_index >= 0:
+                self.cb_course_profile.setCurrentIndex(profile_index)
         self.lbl_prediction_notice.setText(notice)
 
     def _handle_import(self) -> None:
@@ -1215,6 +1218,18 @@ class MainWindow(QMainWindow):
         if self.current_df is None or self.current_df.empty:
             QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dataset trước khi dự đoán.")
             return
+        if "tx2_score" in self.current_df.columns:
+            tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
+            if tx2_values.notna().any() and tx2_values.isna().any():
+                QMessageBox.warning(
+                    self,
+                    "Dữ liệu TX2 chưa đồng nhất",
+                    "Một số bản ghi có TX2 nhưng một số bản ghi khác không có điểm TX2. "
+                    "Hãy tách file theo cấu trúc đánh giá hoặc xử lý điểm TX2 bị thiếu "
+                    "trước khi dự đoán. Không thể áp dụng một công thức điểm học phần chính xác "
+                    "cho toàn bộ file ở trạng thái hiện tại.",
+                )
+                return
         profile_id = self.cb_course_profile.currentData()
         if profile_id not in {"no_tx2", "with_tx2"}:
             QMessageBox.warning(
@@ -1224,18 +1239,6 @@ class MainWindow(QMainWindow):
                 "Khi cột TX2 không có hoặc toàn ô trống, ứng dụng không tự suy luận công thức điểm.",
             )
             return
-        if "tx2_score" in self.current_df.columns:
-            tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
-            if tx2_values.notna().any() and tx2_values.isna().any():
-                QMessageBox.warning(
-                    self,
-                    "Dữ liệu TX2 chưa đồng nhất",
-                    "Một số bản ghi có TX2 nhưng một số bản ghi khác không có điểm TX2. "
-                    "Hãy tách dữ liệu theo cấu hình học phần hoặc xử lý các điểm TX2 bị thiếu "
-                    "trước khi dự đoán. Không thể áp dụng một công thức điểm học phần chính xác "
-                    "cho toàn bộ file ở trạng thái hiện tại.",
-                )
-                return
         if not self._is_model_ready():
             self._update_model_status()
             QMessageBox.warning(
