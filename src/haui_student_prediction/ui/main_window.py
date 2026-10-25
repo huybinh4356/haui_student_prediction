@@ -420,7 +420,7 @@ class MainWindow(QMainWindow):
         cards.setSpacing(12)
         self.card_records = _MetricCard("BẢN GHI ĐÃ NẠP", "—", "Chưa có dataset", "blue")
         self.card_missing = _MetricCard("Ô DỮ LIỆU THIẾU", "—", "Chưa có dataset", "amber")
-        self.card_absence = _MetricCard("VƯỢT NGƯỠNG NGHỈ HỌC", "—", "Ngưỡng cấu hình > 30%", "red")
+        self.card_absence = _MetricCard("VƯỢT NGƯỠNG NGHỈ HỌC", "—", "Ngưỡng cấu hình > 75%", "red")
         self.card_model = _MetricCard("MÔ HÌNH DỰ ĐOÁN", "Chưa sẵn sàng", "Cần model đã huấn luyện", "violet")
         cards.addWidget(self.card_records, 0, 0)
         cards.addWidget(self.card_missing, 0, 1)
@@ -599,7 +599,7 @@ class MainWindow(QMainWindow):
         cards = QGridLayout()
         cards.setSpacing(12)
         self.card_risk_evaluated = _MetricCard("ĐÃ ĐÁNH GIÁ", "—", "Chưa có kết quả", "blue")
-        self.card_risk_override = _MetricCard("VƯỢT NGƯỠNG", "—", "Nghỉ học > 30%", "red")
+        self.card_risk_override = _MetricCard("VƯỢT NGƯỠNG", "—", "Nghỉ học > 75%", "red")
         self.card_risk_high = _MetricCard("NGUY CƠ CAO / RẤT CAO", "—", "Theo cấu hình risk engine", "amber")
         cards.addWidget(self.card_risk_evaluated, 0, 0)
         cards.addWidget(self.card_risk_override, 0, 1)
@@ -711,7 +711,7 @@ class MainWindow(QMainWindow):
             "Công thức không TX2: 0,2 × TX1 + 0,2 × giữa kỳ + 0,6 × điểm cuối kỳ dự đoán.\n"
             "Công thức có TX2: 0,15 × TX1 + 0,15 × TX2 + 0,2 × giữa kỳ + 0,5 × điểm cuối kỳ dự đoán.\n"
             "Trọng số nguy cơ: nghỉ học 75%, điểm số 8%, LMS 8%, tương tác 4%, đi làm thêm 2%, stress 1,5%, động lực 1,5%.\n"
-            "Tỷ lệ nghỉ học trên 30% bật trạng thái override riêng."
+            "Tỷ lệ nghỉ học trên 75% bật trạng thái override riêng."
         )
         rules.setWordWrap(True)
         rules.setStyleSheet("color:#475467;line-height:1.5;")
@@ -783,7 +783,7 @@ class MainWindow(QMainWindow):
         if self.current_df is None:
             self.card_records.set_value("0", "Chưa có dataset", "blue")
             self.card_missing.set_value("—", "Chưa có dataset", "amber")
-            self.card_absence.set_value("—", "Ngưỡng cấu hình > 30%", "red")
+            self.card_absence.set_value("—", "Ngưỡng cấu hình > 75%", "red")
             self.card_risk_override_value = None
             self.dashboard_summary.setText("Chưa có dữ liệu được nạp vào phiên làm việc.")
             self._show_dashboard_placeholder("Nhập dữ liệu để hiển thị phân tích.")
@@ -792,8 +792,8 @@ class MainWindow(QMainWindow):
             missing_cells = int(df.isna().sum().sum())
             if "absence_percentage" in df.columns:
                 absence = pd.to_numeric(df["absence_percentage"], errors="coerce")
-                override_count = int((absence > 30).sum())
-                self.card_absence.set_value(f"{override_count:,}", "Tỷ lệ nghỉ học > 30%", "red")
+                override_count = int((absence > 75).sum())
+                self.card_absence.set_value(f"{override_count:,}", "Tỷ lệ nghỉ học > 75%", "red")
             else:
                 override_count = 0
                 self.card_absence.set_value("—", "Không có cột absence_percentage", "amber")
@@ -805,7 +805,7 @@ class MainWindow(QMainWindow):
                 f"Số bản ghi: {len(df):,}",
                 f"Số cột: {len(df.columns):,}",
                 f"Ô dữ liệu thiếu: {missing_cells:,}",
-                f"Bản ghi có tỷ lệ nghỉ học trên 30%: {override_count:,}",
+                f"Bản ghi có tỷ lệ nghỉ học trên 75%: {override_count:,}",
             ]
             if self.prediction_df is not None:
                 summary_lines.append(f"Bản ghi đã dự đoán điểm: {len(self.prediction_df):,}")
@@ -925,7 +925,7 @@ class MainWindow(QMainWindow):
         ]
         if "absence_percentage" in dataframe.columns:
             values = pd.to_numeric(dataframe["absence_percentage"], errors="coerce")
-            lines.append(f"Bản ghi nghỉ học trên 30%: {int((values > 30).sum()):,}")
+            lines.append(f"Bản ghi nghỉ học trên 75%: {int((values > 75).sum()):,}")
         return "\n".join(lines)
 
     def _refresh_data_table(self) -> None:
