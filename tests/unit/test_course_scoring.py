@@ -24,3 +24,14 @@ def test_missing_tx2_raises_error():
     service = ScoringService(profiles)
     with pytest.raises(ValueError):
         service.calculate_score("with_tx2", tx1=8.0, midterm=7.0, predicted_final=9.0)
+
+
+
+def test_non_finite_component_is_rejected():
+    profiles = {
+        "no_tx2": CourseProfile(0.20, 0.0, 0.20, 0.60, False)
+    }
+    service = ScoringService(profiles)
+
+    with pytest.raises(ValueError, match="finite number"):
+        service.calculate_score("no_tx2", tx1=float("nan"), midterm=7.0, predicted_final=9.0)
