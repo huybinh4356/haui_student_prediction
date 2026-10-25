@@ -72,6 +72,9 @@ class DataCleaner:
                     lambda v: np.nan if _is_blank(v) else v
                 )
 
+        if "student_id" in df_clean.columns:
+            df_clean["student_id"] = df_clean["student_id"].apply(self._normalize_student_id)
+
         for col in NUMERIC_COLUMNS:
             if col not in df_clean.columns:
                 continue
@@ -107,6 +110,16 @@ class DataCleaner:
             df_clean["works_part_time"] = parsed
 
         return df_clean
+
+    def _normalize_student_id(self, value: Any) -> Any:
+        if _is_blank(value):
+            return np.nan
+        if isinstance(value, (int, np.integer)) and not isinstance(value, (bool, np.bool_)):
+            return str(value)
+        if isinstance(value, (float, np.floating)) and np.isfinite(value):
+            if float(value).is_integer():
+                return str(int(value))
+        return str(value).strip()
 
     def _parse_bool_strict(self, value: Any) -> Any:
         """Parse a boolean strictly (requirement #3).
