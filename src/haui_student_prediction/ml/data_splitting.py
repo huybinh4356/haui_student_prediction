@@ -22,8 +22,9 @@ def split_train_test(
 
     if "student_id" in dataframe.columns:
         identifiers = dataframe["student_id"]
-        nonblank = identifiers.notna() & identifiers.astype(str).str.strip().ne("")
-        valid_identifiers = identifiers.loc[nonblank].astype(str)
+        normalized_identifiers = identifiers.astype("string").str.strip().str.casefold()
+        nonblank = identifiers.notna() & normalized_identifiers.ne("")
+        valid_identifiers = normalized_identifiers.loc[nonblank]
         has_repeated_students = valid_identifiers.duplicated().any()
 
         if has_repeated_students:
@@ -47,7 +48,7 @@ def split_train_test(
             selected_split = None
             for train_indices, test_indices in splitter.split(
                 dataframe,
-                groups=identifiers.astype(str),
+                groups=normalized_identifiers.astype(str),
             ):
                 if len(train_indices) >= 3 and len(test_indices) >= 2:
                     selected_split = (train_indices, test_indices)
@@ -63,8 +64,8 @@ def split_train_test(
             train_data = dataframe.iloc[train_indices].copy()
             test_data = dataframe.iloc[test_indices].copy()
 
-            train_students = set(train_data["student_id"].astype(str))
-            test_students = set(test_data["student_id"].astype(str))
+            train_students = set(normalized_identifiers.iloc[train_indices])
+            test_students = set(normalized_identifiers.iloc[test_indices])
             if train_students & test_students:
                 raise RuntimeError("Phát hiện student_id giao nhau giữa train và test.")
 
