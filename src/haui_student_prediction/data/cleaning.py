@@ -141,8 +141,17 @@ class DataCleaner:
         self, df: pd.DataFrame, courses_with_tx2: list[str],
     ) -> pd.DataFrame:
         df_clean = df.copy()
-        if "course_id" in df_clean.columns:
+        if "course_id" not in df_clean.columns:
+            df_clean["has_tx2"] = False
+        elif courses_with_tx2:
             df_clean["has_tx2"] = df_clean["course_id"].isin(courses_with_tx2)
+        elif "tx2_score" in df_clean.columns:
+            df_clean["has_tx2"] = (
+                df_clean.groupby("course_id", dropna=False)["tx2_score"]
+                .transform(lambda values: values.notna().any())
+                .fillna(False)
+                .astype(bool)
+            )
         else:
             df_clean["has_tx2"] = False
         return df_clean
