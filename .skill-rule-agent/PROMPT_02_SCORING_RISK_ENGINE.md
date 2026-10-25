@@ -54,13 +54,13 @@ Kiểm tra bằng code/test rằng tổng bằng 1.0 (100%). Từng component ri
 
 ### Quy tắc absence
 
-- `absence_percentage > 30`: `override_triggered = true`, `attendance_status = HOC_LAI` theo yêu cầu dự án.
-- `20 <= absence_percentage <= 30`: nguy cơ attendance cao.
+- `absence_percentage > 75`: `override_triggered = true`, `attendance_status = HOC_LAI` theo yêu cầu dự án.
+- `20 <= absence_percentage <= 75`: nguy cơ attendance cao.
 - `10 <= absence_percentage < 20`: trung bình.
 - `5 <= absence_percentage < 10`: thấp.
 - `0 <= absence_percentage < 5`: rất thấp.
 
-Đúng biên `30.0` không kích hoạt override. `30.01` và `31.0` phải kích hoạt. Giá trị âm hoặc trên 100 phải validation error, không được âm thầm clip.
+Đúng biên `75.0` không kích hoạt override. `75.01` và `76.0` phải kích hoạt. Giá trị âm hoặc trên 100 phải validation error, không được âm thầm clip.
 
 Override phải độc lập với weighted score. Một khảo sát tích cực hoặc score tổng hợp thấp không được hủy `HOC_LAI`. Trả cả weighted score/category và override status riêng.
 
