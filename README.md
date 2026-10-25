@@ -74,6 +74,8 @@ Import workflow:
 3. Review errors, warnings, and duplicate rows.
 4. Confirm the import.
 
+Duplicate detection uses `student_id`, `course_id`, and `semester` together. If a key column or a row's key value is missing, the application warns that duplicate detection is incomplete for those records instead of treating missing key values as a confirmed duplicate.
+
 An import is not reported as successful if writing the validated dataset to SQLite fails.
 
 ## Training model
