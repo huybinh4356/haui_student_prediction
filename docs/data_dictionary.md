@@ -23,7 +23,7 @@
 | course_id | string | Determines assessment profile |
 | course_name | string | Display |
 | semester | string | Temporal grouping |
-| has_tx2 | boolean | Configuration; True if course has TX2 |
+| has_tx2 | nullable boolean | True/False when explicit course configuration or observed course records establish TX2 applicability; unknown when the score is missing and no configuration is available |
 
 ## Score Components
 
