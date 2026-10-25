@@ -72,8 +72,11 @@ class DataCleaner:
                     lambda v: np.nan if _is_blank(v) else v
                 )
 
-        if "student_id" in df_clean.columns:
-            df_clean["student_id"] = df_clean["student_id"].apply(self._normalize_student_id)
+        for column in ("student_id", "course_id"):
+            if column in df_clean.columns:
+                df_clean[column] = df_clean[column].apply(self._normalize_student_id)
+        if "semester" in df_clean.columns:
+            df_clean["semester"] = df_clean["semester"].apply(self._normalize_identifier_text)
 
         for col in NUMERIC_COLUMNS:
             if col not in df_clean.columns:
@@ -119,6 +122,11 @@ class DataCleaner:
         if isinstance(value, (float, np.floating)) and np.isfinite(value):
             if float(value).is_integer():
                 return str(int(value))
+        return str(value).strip().upper()
+
+    def _normalize_identifier_text(self, value: Any) -> Any:
+        if _is_blank(value):
+            return np.nan
         return str(value).strip()
 
     def _parse_bool_strict(self, value: Any) -> Any:
