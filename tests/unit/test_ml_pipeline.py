@@ -107,6 +107,15 @@ def test_contract_rejects_identifier_as_feature():
             )
 
 
+def test_contract_rejects_historical_target_alias_as_feature():
+    with pytest.raises(ValueError, match="target columns must not be features"):
+        FeatureContract(
+            numerical_features=["Điểm thi thực tế"],
+            categorical_features=[],
+            target_column="target_final_exam_score",
+        )
+
+
 def test_contract_rejects_overlap_num_cat():
     with pytest.raises(ValueError, match="both numerical and categorical"):
         FeatureContract(
