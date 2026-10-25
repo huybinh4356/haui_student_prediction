@@ -17,6 +17,8 @@ def is_training_target_column(column_name: object) -> bool:
         "prediction",
         "forecast",
         "expected",
+        "estimate",
+        "estimated",
         "dukien",
         "dudoan",
         "uocluong",
