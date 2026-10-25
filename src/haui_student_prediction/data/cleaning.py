@@ -199,14 +199,19 @@ class DataCleaner:
             applicable = applicable.mask(df_clean["course_id"].isna(), pd.NA)
             df_clean["has_tx2"] = applicable.astype("boolean")
         elif "tx2_score" in df_clean.columns and "course_id" in df_clean.columns:
-            course_has_tx2 = df_clean.groupby(
-                "course_id", dropna=False
-            )["tx2_score"].transform(lambda values: values.notna().any())
-            df_clean["has_tx2"] = pd.Series(
-                course_has_tx2.where(course_has_tx2, pd.NA),
-                index=df_clean.index,
-                dtype="boolean",
+            course_ids = df_clean["course_id"]
+            has_course_id = (
+                course_ids.notna()
+                & course_ids.astype("string").str.strip().ne("")
             )
+            applicable = pd.Series(pd.NA, index=df_clean.index, dtype="boolean")
+            known_course_scores = df_clean.loc[has_course_id].groupby(
+                "course_id"
+            )["tx2_score"].transform(lambda values: values.notna().any())
+            applicable.loc[has_course_id] = known_course_scores.astype("boolean")
+            missing_course_id_with_score = (~has_course_id) & df_clean["tx2_score"].notna()
+            applicable.loc[missing_course_id_with_score] = True
+            df_clean["has_tx2"] = applicable
         elif "tx2_score" in df_clean.columns:
             df_clean["has_tx2"] = pd.Series(
                 df_clean["tx2_score"].notna().where(df_clean["tx2_score"].notna(), pd.NA),
