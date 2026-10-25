@@ -12,21 +12,40 @@ def normalize_column_name(value: object) -> str:
 
 def is_training_target_column(column_name: object) -> bool:
     normalized = normalize_column_name(column_name)
+    prediction_markers = (
+        "predicted",
+        "prediction",
+        "forecast",
+        "expected",
+        "dukien",
+        "dudoan",
+        "uocluong",
+    )
+    if any(marker in normalized for marker in prediction_markers):
+        return False
+
     aliases = {
         "targetfinalexamscore",
         "finalexamscore",
+        "actualfinalexamscore",
         "diemthi",
         "diemthicuoiky",
         "diemcuoiky",
         "diemck",
+        "diemthucte",
+        "diemthicuoikythucte",
+        "diemcuoikythucte",
+        "diemckthucte",
     }
     if normalized in aliases:
         return True
-    if "predicted" in normalized:
-        return False
     if "final" in normalized and "exam" in normalized and "score" in normalized:
         return True
-    return "diem" in normalized and ("thi" in normalized or "cuoiky" in normalized)
+    return (
+        "diemthi" in normalized
+        or "diemcuoiky" in normalized
+        or normalized.startswith("diemck")
+    )
 
 
 def get_default_column_mapping() -> Dict[str, str]:
