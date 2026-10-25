@@ -214,6 +214,20 @@ def test_duplicates_block_success(service, tmp_path):
     assert len(dup_errs) == 1
 
 
+
+def test_duplicate_ids_are_trimmed_before_validation(service, tmp_path):
+    rows = _valid_rows()
+    rows[1]["Mã SV"] = " SV01 "
+    rows[1]["Mã môn"] = "IT101"
+    rows[1]["Học kỳ"] = "2024.1"
+    path = _write_csv(tmp_path, "dup_spaces.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    assert sorted(result.duplicate_indices) == [0, 1]
+
+
 # ---- 8. valid file ----------------------------------------------------------
 
 def test_valid_file_succeeds(service, tmp_path):
