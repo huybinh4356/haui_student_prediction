@@ -63,7 +63,7 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
         )
         raise ValueError(f"Dữ liệu huấn luyện có giá trị không hợp lệ: {details}")
 
-    target_values = target.to_numpy(dtype=float, na_value=np.nan)
+    target_values = target.to_numpy(dtype=float, na_value=np.nan, copy=True)
     target_values[~np.isfinite(target_values)] = np.nan
     feature_data[TARGET_COLUMN] = target_values
     valid = np.isfinite(target_values)
