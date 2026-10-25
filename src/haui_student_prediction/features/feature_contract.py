@@ -49,7 +49,7 @@ class FeatureContract:
         )
         if leaked_targets:
             raise ValueError(
-                f"Historical or actual final-exam target columns must not be features: {leaked_targets}"
+                f"Historical or actual final-exam target columns must not be features (target leakage): {leaked_targets}"
             )
 
         if self.target_column in all_feats:
