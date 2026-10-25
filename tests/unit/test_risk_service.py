@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from haui_student_prediction.risk.risk_calculator import RiskCalculator
 from haui_student_prediction.services.risk_prediction_service import RiskPredictionService
+from haui_student_prediction.services.risk_service import StudentRiskService
 
 
 @pytest.fixture
@@ -113,3 +114,12 @@ def test_part_time_status_uses_neutral_risk_mapping(service):
     working = service.evaluate_student_risk(_row(works_part_time=True))
 
     assert working.weighted_score == not_working.weighted_score
+
+
+
+def test_legacy_risk_service_uses_real_record_inputs():
+    service = StudentRiskService()
+    result = service.evaluate_student(_row(absence_percentage=76))
+
+    assert result.is_override is True
+    assert result.absence_status == "REPEAT_REQUIRED"
