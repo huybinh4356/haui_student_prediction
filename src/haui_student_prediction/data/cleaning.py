@@ -189,20 +189,32 @@ class DataCleaner:
         self, df: pd.DataFrame, courses_with_tx2: list[str],
     ) -> pd.DataFrame:
         df_clean = df.copy()
-        if "course_id" not in df_clean.columns:
-            if "tx2_score" in df_clean.columns:
-                df_clean["has_tx2"] = df_clean["tx2_score"].notna()
-            else:
-                df_clean["has_tx2"] = False
-        elif courses_with_tx2:
-            df_clean["has_tx2"] = df_clean["course_id"].isin(courses_with_tx2)
+        if courses_with_tx2 and "course_id" in df_clean.columns:
+            normalized_tx2_courses = {
+                self._normalize_student_id(course_id)
+                for course_id in courses_with_tx2
+                if not _is_blank(course_id)
+            }
+            df_clean["has_tx2"] = df_clean["course_id"].isin(normalized_tx2_courses).astype("boolean")
+        elif "tx2_score" in df_clean.columns and "course_id" in df_clean.columns:
+            course_has_tx2 = df_clean.groupby(
+                "course_id", dropna=False
+            )["tx2_score"].transform(lambda values: values.notna().any())
+            df_clean["has_tx2"] = pd.Series(
+                course_has_tx2.where(course_has_tx2, pd.NA),
+                index=df_clean.index,
+                dtype="boolean",
+            )
         elif "tx2_score" in df_clean.columns:
-            df_clean["has_tx2"] = (
-                df_clean.groupby("course_id", dropna=False)["tx2_score"]
-                .transform(lambda values: values.notna().any())
-                .fillna(False)
-                .astype(bool)
+            df_clean["has_tx2"] = pd.Series(
+                df_clean["tx2_score"].notna().where(df_clean["tx2_score"].notna(), pd.NA),
+                index=df_clean.index,
+                dtype="boolean",
             )
         else:
-            df_clean["has_tx2"] = False
+            df_clean["has_tx2"] = pd.Series(
+                pd.NA,
+                index=df_clean.index,
+                dtype="boolean",
+            )
         return df_clean
