@@ -78,6 +78,13 @@ class IngestionService:
         unavailable_duplicate_keys = [
             column for column in duplicate_key_columns if column not in df_final.columns
         ]
+        incomplete_duplicate_key_rows = 0
+        if not unavailable_duplicate_keys:
+            key_data = df_final[duplicate_key_columns]
+            complete_key_mask = key_data.notna().all(axis=1)
+            for column in duplicate_key_columns:
+                complete_key_mask &= key_data[column].astype(str).str.strip().ne("")
+            incomplete_duplicate_key_rows = int((~complete_key_mask).sum())
         duplicate_indices = self.validator.check_duplicates(
             df_final, duplicate_key_columns
         )
@@ -136,6 +143,19 @@ class IngestionService:
                         "kind": "duplicate_check_incomplete",
                     }]
                     if unavailable_duplicate_keys else []
+                ),
+                *(
+                    [{
+                        "column": ",".join(duplicate_key_columns),
+                        "rows_with_missing_key": incomplete_duplicate_key_rows,
+                        "note": (
+                            f"{incomplete_duplicate_key_rows} dòng thiếu ít nhất một giá trị khóa "
+                            "trùng (student_id, course_id, semester), vì vậy các dòng này không "
+                            "được dùng để kết luận trùng."
+                        ),
+                        "kind": "duplicate_check_incomplete_values",
+                    }]
+                    if incomplete_duplicate_key_rows else []
                 ),
                 *[
                     {
