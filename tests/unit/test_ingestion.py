@@ -245,6 +245,16 @@ def test_tx2_determination(service, tmp_path):
     assert bool(r1["has_tx2"]) is False
 
 
+def test_tx2_inference_when_course_mapping_is_empty(service, tmp_path):
+    path = _write_csv(tmp_path, "tx2_inferred.csv", _valid_rows())
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    data = result.data.set_index("student_id")
+    assert bool(data.loc["SV01", "has_tx2"]) is True
+    assert bool(data.loc["SV02", "has_tx2"]) is False
+
+
 # ---- 10. result consistency -------------------------------------------------
 
 def test_result_consistency_no_success_returns_none_data(service, tmp_path):
