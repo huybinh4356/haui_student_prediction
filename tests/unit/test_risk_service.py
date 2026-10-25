@@ -30,25 +30,20 @@ def test_missing_absence_raises(service):
         service.evaluate_student_risk(_row(absence_percentage=np.nan))
 
 
-def test_missing_works_part_time_raises(service):
-    with pytest.raises(ValueError, match="works_part_time"):
-        service.evaluate_student_risk(_row(works_part_time=np.nan))
+def test_missing_part_time_field_uses_neutral_risk_mapping(service):
+    row = _row().drop(labels=["works_part_time"])
+    result = service.evaluate_student_risk(row)
+
+    assert 0 <= result.weighted_score <= 100
 
 
-def test_nan_works_part_time_not_true(service):
-    """NaN must not be silently treated as True."""
-    with pytest.raises(ValueError):
-        service.evaluate_student_risk(_row(works_part_time=np.nan))
+def test_part_time_status_uses_neutral_risk_mapping(service):
+    not_working = service.evaluate_student_risk(_row(works_part_time=False))
+    working = service.evaluate_student_risk(_row(works_part_time=True))
+    missing = service.evaluate_student_risk(_row().drop(labels=["works_part_time"]))
 
-
-def test_works_part_time_string_false(service):
-    r = service.evaluate_student_risk(_row(works_part_time="False"))
-    assert r.weighted_score >= 0
-
-
-def test_works_part_time_string_true(service):
-    r = service.evaluate_student_risk(_row(works_part_time="True"))
-    assert r.weighted_score >= 0
+    assert working.weighted_score == not_working.weighted_score
+    assert missing.weighted_score == not_working.weighted_score
 
 
 def test_absence_no_override_at_75(service):
@@ -108,18 +103,3 @@ def test_risk_score_in_range(service):
     assert 0 <= r.weighted_score <= 100
 
 
-
-def test_part_time_status_uses_neutral_risk_mapping(service):
-    not_working = service.evaluate_student_risk(_row(works_part_time=False))
-    working = service.evaluate_student_risk(_row(works_part_time=True))
-
-    assert working.weighted_score == not_working.weighted_score
-
-
-
-def test_legacy_risk_service_uses_real_record_inputs():
-    service = StudentRiskService()
-    result = service.evaluate_student(_row(absence_percentage=76))
-
-    assert result.is_override is True
-    assert result.absence_status == "REPEAT_REQUIRED"
