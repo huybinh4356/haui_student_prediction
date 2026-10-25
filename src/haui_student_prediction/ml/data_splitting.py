@@ -46,13 +46,17 @@ def split_train_test(
                 random_state=random_state,
             )
             selected_split = None
+            selected_distance = None
             for train_indices, test_indices in splitter.split(
                 dataframe,
                 groups=normalized_identifiers.astype(str),
             ):
-                if len(train_indices) >= 3 and len(test_indices) >= 2:
+                if len(train_indices) < 3 or len(test_indices) < 2:
+                    continue
+                distance = abs(len(test_indices) - test_rows)
+                if selected_distance is None or distance < selected_distance:
                     selected_split = (train_indices, test_indices)
-                    break
+                    selected_distance = distance
 
             if selected_split is None:
                 raise ValueError(
