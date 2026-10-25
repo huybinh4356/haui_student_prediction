@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from haui_student_prediction.features.feature_contract import (
     FeatureContract,
@@ -49,8 +50,16 @@ class FeatureBuilder:
         # categorical columns to string/object so they are treated as
         # categorical text. Bool True/False -> "True"/"False".
         for col in self.contract.categorical_features:
-            if col in X.columns and X[col].dtype == bool:
+            if col not in X.columns:
+                continue
+            if X[col].dtype == bool:
                 X[col] = X[col].astype(str)
+            elif X[col].dtype == object:
+                X[col] = X[col].map(
+                    lambda value: str(value) if isinstance(value, (bool, np.bool_)) else value
+                )
+            elif X[col].isna().all():
+                X[col] = X[col].astype(object)
 
         return X
 
