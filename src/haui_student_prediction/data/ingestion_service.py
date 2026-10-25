@@ -46,7 +46,10 @@ class IngestionService:
 
         suffix = path.suffix.lower()
         if suffix == '.csv':
-            df_raw = pd.read_csv(path)
+            try:
+                df_raw = pd.read_csv(path, encoding="utf-8-sig")
+            except UnicodeDecodeError:
+                df_raw = pd.read_csv(path, encoding="cp1258")
         elif suffix in ['.xls', '.xlsx']:
             df_raw = pd.read_excel(path)
         else:
