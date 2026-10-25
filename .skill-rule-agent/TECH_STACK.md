@@ -60,7 +60,7 @@
 4. Lưu pipeline và metadata qua `ModelRegistry`.
 5. Dự đoán điểm cuối kỳ bằng model được đăng ký với version `xgboost-1.0.0`.
 6. Tính điểm tổng kết bằng `ScoringService`; không tạo điểm tổng kết độc lập khiến kết quả mâu thuẫn với công thức học phần.
-7. Tính nguy cơ học vụ bằng risk engine hiện tại. Quy tắc nghỉ học **trên 30%** tiếp tục được giữ nguyên.
+7. Tính nguy cơ học vụ bằng risk engine hiện tại. Quy tắc nghỉ học **trên 75%** kích hoạt override học vụ theo yêu cầu hiện tại của chủ dự án.
 
 XGBoost không mặc nhiên chính xác hơn với mọi dataset. Dữ liệu 30–50 sinh viên có thể khiến kết quả đánh giá dao động mạnh; phải báo cáo MAE, RMSE và R² trên tập kiểm thử, đồng thời diễn giải thận trọng. Không tuyên bố mô hình tốt hơn nếu chưa có đánh giá thực tế.
 
@@ -92,4 +92,4 @@ Một test đã được viết không đồng nghĩa với test đã chạy th�
 - Không xóa module đang được sử dụng chỉ vì tên có vẻ cũ.
 - Không tạo lớp tương đương nếu dự án đã có service/repository đảm nhiệm cùng chức năng.
 - Mọi thay đổi ảnh hưởng đến đầu ra điểm phải giữ đúng trọng số TX1/TX2/giữa kỳ/cuối kỳ đã cấu hình.
-- Mọi thay đổi liên quan nguy cơ học vụ phải giữ quy tắc nghiệp vụ nghỉ học trên 30%, trừ khi chủ dự án xác nhận quy định khác.
+- Mọi thay đổi liên quan nguy cơ học vụ phải giữ quy tắc nghiệp vụ nghỉ học trên 75%, trừ khi chủ dự án xác nhận quy định khác.
