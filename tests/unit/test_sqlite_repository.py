@@ -55,3 +55,11 @@ def test_import_replaces_previous_session(tmp_path):
     actual = repository.get_session_data()
 
     assert actual["student_id"].tolist() == ["S002"]
+
+def test_default_database_path_uses_current_project_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_BASE_DIR", str(tmp_path))
+
+    repository = DataRepository()
+
+    assert repository.db_path == (tmp_path / "data" / "session_student.db").resolve()
+
