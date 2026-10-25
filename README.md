@@ -70,8 +70,8 @@ The application supports CSV and Excel (`.xls`, `.xlsx`) files. Common fields in
 Import workflow:
 
 1. Select a file in the UI.
-2. Map and validate columns.
-3. Review errors, warnings, and duplicate rows.
+2. Recognized Vietnamese and English column aliases are mapped to canonical fields, then validated.
+3. Review errors, warnings, duplicate rows, and any incomplete duplicate checks.
 4. Confirm the import.
 
 Duplicate detection uses `student_id`, `course_id`, and `semester` together. If a key column or a row's key value is missing, the application warns that duplicate detection is incomplete for those records instead of treating missing key values as a confirmed duplicate.
