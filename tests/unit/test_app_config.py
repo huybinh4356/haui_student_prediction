@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from haui_student_prediction import app_config
@@ -16,7 +17,7 @@ def test_load_config_resolves_app_base_dir_from_project_dotenv(tmp_path, monkeyp
     monkeypatch.delenv("APP_BASE_DIR", raising=False)
 
     def resolve_root():
-        configured = __import__("os").getenv("APP_BASE_DIR")
+        configured = os.getenv("APP_BASE_DIR")
         return Path(configured).resolve() if configured else project_root
 
     monkeypatch.setattr(app_config, "get_project_root", resolve_root)
