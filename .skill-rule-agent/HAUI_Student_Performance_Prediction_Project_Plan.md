@@ -16,7 +16,7 @@ Xây dựng ứng dụng phân tích và dự đoán kết quả học tập sin
 4. **Dự đoán nguy cơ học vụ:** ở phiên bản đầu tiên, dùng bộ quy tắc và điểm nguy cơ có trọng số; giữ kiến trúc mở để bổ sung mô hình phân loại ML khi có nhãn lịch sử phù hợp và được kiểm chứng.  
 **1.2. Nguyên tắc thiết kế**  
 - Tên hiển thị dùng **“Dự đoán kết quả học tập”** và  **“Dự đoán nguy cơ học vụ”**, không dùng “chẩn đoán”.  
-- Quy tắc nghỉ học trên 30% là một **điều kiện ưu tiên riêng** theo đặc tả của dự án; điểm khảo sát hoặc điểm số tốt không được xóa trạng thái này.  
+- Quy tắc nghỉ học trên 75% là một **điều kiện ưu tiên riêng** theo đặc tả của dự án; điểm khảo sát hoặc điểm số tốt không được xóa trạng thái này.  
 - Công thức tính điểm học phần và công thức điểm nguy cơ là hai thành phần độc lập.  
 - Không tự bịa dữ liệu HaUI, không báo chỉ số mô hình từ dữ liệu cũ như chỉ số của mô hình mới.  
 - Không đưa MSV và họ tên vào feature huấn luyện.  
@@ -125,7 +125,7 @@ Cần dữ liệu lịch sử bao gồm cả input trước kỳ thi và điểm
 ![](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAnEAAAACCAYAAAA3pIp+AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA7EAAAOxAGVKw4bAAAANklEQVR4nO3OMQ2AABAAsSPBCj7fFRYQwYwEZiywEZJWQZeZ2ao9AAD+4lyruzq+ngAA8Nr1AMTJBeJDClAyAAAAAElFTkSuQmCC)  
 **5. Thiết kế dự đoán nguy cơ học vụ**  
 **5.1. Tách điều kiện cứng và điểm nguy cơ tổng hợp**  
-- **Điều kiện ưu tiên:**absence_percentage > 30 kích hoạt trạng thái RETAKE_RULE_TRIGGERED / “Vượt ngưỡng nghỉ học — cần kiểm tra điều kiện học phần” theo yêu cầu của chủ dự án. Không để các yếu tố khác xóa trạng thái này.  
+- **Điều kiện ưu tiên:**absence_percentage > 75 kích hoạt trạng thái RETAKE_RULE_TRIGGERED / “Vượt ngưỡng nghỉ học — cần kiểm tra điều kiện học phần” theo yêu cầu của chủ dự án. Không để các yếu tố khác xóa trạng thái này.  
 - Việc gắn nhãn “học lại” chính thức cần đối chiếu quy định áp dụng của học phần trước khi dùng trong hệ thống thực tế; về code nên giữ tên trạng thái cấu hình được.  
 - Khi tỷ lệ nghỉ học không có hoặc không hợp lệ, không được kết luận rằng sinh viên không vượt ngưỡng; trả về INSUFFICIENT_DATA.  
 - Ngoài điều kiện cứng, hệ thống tính điểm nguy cơ tổng hợp từ các thành phần đã chuẩn hóa về cùng hướng: **100 = tín hiệu rủi ro cao, 0 = tín hiệu rủi ro thấp**.  
@@ -147,8 +147,8 @@ Các khoảng phải được triển khai không chồng lấn:
 | | |  
 |-|-|  
 | **absence_percentage** | **Trạng thái chuyên cần** |   
-| > 30 | Điều kiện ưu tiên: vượt ngưỡng; hiển thị cảnh báo theo quy tắc dự án |   
-| 20–30 (bao gồm 20 và 30) | Nguy cơ cao |   
+| > 75 | Điều kiện ưu tiên: vượt ngưỡng; hiển thị cảnh báo theo quy tắc dự án |   
+| 20–75 (bao gồm 20 và 75) | Nguy cơ cao |   
 | 10–<20 | Nguy cơ trung bình |   
 | 5–<10 | Nguy cơ thấp |   
 | 0–<5 | Nguy cơ rất thấp |   
@@ -189,8 +189,8 @@ Bản mapping khởi tạo để triển khai prototype có thể dùng như sau
 | Nghỉ học | <5% | 0 |   
 | Nghỉ học | 5–<10% | 30 |   
 | Nghỉ học | 10–<20% | 55 |   
-| Nghỉ học | 20–30% | 80 |   
-| Nghỉ học | >30% | 100 và kích hoạt trạng thái ưu tiên |   
+| Nghỉ học | 20–75% | 80 |   
+| Nghỉ học | >75% | 100 và kích hoạt trạng thái ưu tiên |   
 | LMS | <5% | 100 |   
 | LMS | 5–<10% | 75 |   
 | LMS | 10–<20% | 50 |   
@@ -215,7 +215,7 @@ Có thể dùng các ngưỡng ban đầu để triển khai UI, rồi hiệu ch
 | 60–<80 | Cao |   
 | 80–100 | Rất cao |   
    
-Các ngưỡng tổng hợp này **là ngưỡng prototype đề xuất**, không phải tiêu chuẩn chính thức của HaUI. Chúng phải nằm trong file cấu hình để dễ hiệu chỉnh sau đánh giá. Cảnh báo chuyên cần trên 30% được hiển thị song song và không phụ thuộc vào nhãn tổng hợp.  
+Các ngưỡng tổng hợp này **là ngưỡng prototype đề xuất**, không phải tiêu chuẩn chính thức của HaUI. Chúng phải nằm trong file cấu hình để dễ hiệu chỉnh sau đánh giá. Cảnh báo chuyên cần trên 75% được hiển thị song song và không phụ thuộc vào nhãn tổng hợp.  
 Nếu một thành phần phụ bị thiếu, hệ thống không tự gán 0. Có thể tính điểm trên các thành phần hiện có và chuẩn hóa lại tổng trọng số khả dụng, nhưng phải hiển thị tỷ lệ dữ liệu đầy đủ và đánh dấu kết quả có độ tin cậy hạn chế. Nếu thiếu tỷ lệ nghỉ học, trạng thái ưu tiên không thể kết luận.  
 **5.7. Có phải mô hình ML phân loại nguy cơ không?**  
 Ở MVP, điểm R là **hệ thống tính điểm nguy cơ dựa trên quy tắc/trọng số**, không nên trình bày nó như một mô hình ML đã học từ dữ liệu. Chỉ phát triển bộ phân loại ML khi dataset có nhãn lịch sử đáng tin cậy, ví dụ kết quả học phần thực tế/nhãn nguy cơ được định nghĩa hợp lệ. Nếu triển khai ML sau này, giữ hai kết quả riêng: rule_based_risk và ml_predicted_risk, sau đó đánh giá xem có nên kết hợp hay không.  
@@ -466,8 +466,8 @@ Không nên làm giao diện cầu kỳ trước khi schema, công thức và ta
 - Môn có TX2 nhưng chưa có điểm TX2 không tự chuyển sang công thức A.  
 - Điểm dự đoán, điểm thi thực tế và điểm tổng kết dự kiến được thể hiện tách biệt.  
 **12.3. Nguy cơ**  
-- Nghỉ >30% kích hoạt trạng thái ưu tiên.  
-- Ranh giới 5%, 10%, 20%, 30% không bị chồng lấn hoặc bỏ sót.  
+- Nghỉ >75% kích hoạt trạng thái ưu tiên.  
+- Ranh giới nghỉ học 5%, 10%, 20%, 75% và LMS 5%, 10%, 20%, 30% không bị chồng lấn hoặc bỏ sót.  
 - Tỷ lệ LMS thấp tạo risk points cao hơn nếu ý nghĩa cột đúng như giả định.  
 - Điểm tương tác được chuẩn hóa đúng chiều.  
 - Trọng số cộng đúng 100%.  
@@ -498,7 +498,7 @@ Không nên làm giao diện cầu kỳ trước khi schema, công thức và ta
 | Thang stress/động lực/tương tác? | Lưu thang gốc, min/max, chiều tốt/xấu và mapping | Không thể đảo chiều hoặc chuẩn hóa đúng nếu chưa biết thang |   
 | Điểm học phần nào được xem là nguy cơ? | Đặt trong cấu hình sau khi xác minh cách đánh giá/nhãn lịch sử | Chưa có ngưỡng kết quả thấp do chủ dự án cung cấp |   
 | Nguy cơ tổng hợp được phân nhãn ở ngưỡng nào? | Tạm dùng 0–<20, 20–<40, 40–<60, 60–<80, 80–100 | Đây là ngưỡng prototype, cần hiệu chỉnh trên lịch sử |   
-| “Nghỉ >30% = học lại” áp dụng với mọi môn? | Giữ thành rule cấu hình, xác nhận phạm vi với dữ liệu/quy định áp dụng | Không hard-code giả định cho mọi loại học phần khi chưa xác minh |   
+| “Nghỉ >75% = học lại” áp dụng với mọi môn? | Giữ thành rule cấu hình, xác nhận phạm vi với dữ liệu/quy định áp dụng | Không hard-code giả định cho mọi loại học phần khi chưa xác minh |   
 | Có cần PostgreSQL ngay? | MVP nhập Excel/CSV; thiết kế repository để nâng cấp | Tránh tăng độ phức tạp trước khi có nhu cầu |   
 | Có đủ target lịch sử để train? | Kiểm tra trước P5 | Không target = không thể đánh giá supervised model một cách đúng đắn |   
    
