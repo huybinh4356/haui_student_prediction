@@ -39,3 +39,43 @@ def test_invalid_percentage():
     calc = RiskCalculator()
     with pytest.raises(ValueError):
         _calculate(calc, 105.0)
+
+
+
+def test_non_finite_component_is_rejected():
+    calc = RiskCalculator()
+    with pytest.raises(ValueError, match="finite number"):
+        calc.calculate_risk(
+            absence_pct=10.0,
+            lms_pct=50.0,
+            predicted_course_score=float("nan"),
+            interaction=3.0,
+            interaction_max=5.0,
+            stress=2.0,
+            stress_max=5.0,
+            motivation=4.0,
+            motivation_max=5.0,
+        )
+
+
+def test_zero_survey_scale_maximum_is_rejected():
+    calc = RiskCalculator()
+    with pytest.raises(ValueError, match="greater than zero"):
+        calc.calculate_risk(
+            absence_pct=10.0,
+            lms_pct=50.0,
+            predicted_course_score=7.0,
+            interaction=3.0,
+            interaction_max=0.0,
+            stress=2.0,
+            stress_max=5.0,
+            motivation=4.0,
+            motivation_max=5.0,
+        )
+
+
+def test_invalid_risk_weights_are_rejected():
+    calc = RiskCalculator()
+    calc.weights["absence"] = float("nan")
+    with pytest.raises(ValueError, match="finite and non-negative"):
+        _calculate(calc, 10.0)
