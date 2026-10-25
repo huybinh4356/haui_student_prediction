@@ -531,6 +531,7 @@ class MainWindow(QMainWindow):
         setup_frame, setup_layout = self._surface("Thiết lập dự đoán")
         row = QHBoxLayout()
         self.cb_course_profile = QComboBox()
+        self.cb_course_profile.addItem("Chọn cấu hình đánh giá", None)
         self.cb_course_profile.addItem("Học phần không có TX2", "no_tx2")
         self.cb_course_profile.addItem("Học phần có TX2", "with_tx2")
         self.btn_train_from_prediction = self._primary_button("Huấn luyện mô hình", self._handle_train_model, "warning")
@@ -825,36 +826,32 @@ class MainWindow(QMainWindow):
             self._show_dashboard_placeholder(f"Chưa thể tạo biểu đồ: {exc}")
 
     def _sync_course_profile_from_dataset(self, dataframe: pd.DataFrame) -> None:
-        if "tx2_score" not in dataframe.columns:
-            profile_id = "no_tx2"
-        else:
+        profile_id = None
+        notice = (
+            "Không thể tự xác định học phần có TX2 hay không. "
+            "Hãy chọn cấu hình đánh giá đúng theo học phần trước khi dự đoán; "
+            "không xem cột TX2 vắng hoặc trống là bằng chứng môn không có TX2."
+        )
+
+        if "tx2_score" in dataframe.columns:
             tx2_values = pd.to_numeric(dataframe["tx2_score"], errors="coerce")
-            if tx2_values.empty or tx2_values.isna().all():
-                profile_id = "no_tx2"
-            elif tx2_values.notna().all():
+            if not tx2_values.empty and tx2_values.notna().all():
                 profile_id = "with_tx2"
-            else:
-                self.lbl_prediction_notice.setText(
+                notice = (
+                    "Đã chọn cấu hình có TX2 vì tất cả bản ghi đều có điểm TX2. "
+                    "Hãy xác nhận cấu hình này phù hợp với quy chế đánh giá của học phần."
+                )
+            elif tx2_values.notna().any():
+                notice = (
                     "Dữ liệu có TX2 ở một số dòng nhưng thiếu ở dòng khác. "
-                    "Hãy tách file theo cấu hình học phần hoặc bổ sung điểm TX2 bị thiếu "
+                    "Hãy tách file theo cấu hình học phần hoặc xử lý các điểm TX2 bị thiếu "
                     "trước khi dự đoán để tránh tính sai điểm học phần."
                 )
-                return
 
-        index = self.cb_course_profile.findData(profile_id)
-        if index >= 0:
-            self.cb_course_profile.setCurrentIndex(index)
-
-        if profile_id == "with_tx2":
-            self.lbl_prediction_notice.setText(
-                "Đã tự chọn profile có TX2 vì tất cả bản ghi đều có điểm TX2. "
-                "Hãy xác nhận cấu hình này phù hợp với quy chế đánh giá của học phần."
-            )
-        else:
-            self.lbl_prediction_notice.setText(
-                "Đã tự chọn profile không TX2 vì dữ liệu không có điểm TX2. "
-                "Hãy xác nhận cấu hình này phù hợp với quy chế đánh giá của học phần."
-            )
+        profile_index = self.cb_course_profile.findData(profile_id)
+        if profile_index >= 0:
+            self.cb_course_profile.setCurrentIndex(profile_index)
+        self.lbl_prediction_notice.setText(notice)
 
     def _handle_import(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
@@ -1218,6 +1215,15 @@ class MainWindow(QMainWindow):
         if self.current_df is None or self.current_df.empty:
             QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dataset trước khi dự đoán.")
             return
+        profile_id = self.cb_course_profile.currentData()
+        if profile_id not in {"no_tx2", "with_tx2"}:
+            QMessageBox.warning(
+                self,
+                "Chưa xác định cấu hình TX2",
+                "Hãy chọn rõ học phần có TX2 hoặc không có TX2 theo cấu trúc đánh giá thực tế. "
+                "Khi cột TX2 không có hoặc toàn ô trống, ứng dụng không tự suy luận công thức điểm.",
+            )
+            return
         if "tx2_score" in self.current_df.columns:
             tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
             if tx2_values.notna().any() and tx2_values.isna().any():
@@ -1238,7 +1244,6 @@ class MainWindow(QMainWindow):
                 "Chưa tìm thấy model đã huấn luyện hợp lệ. Mở trang Mô hình ML và chọn một tệp dữ liệu lịch sử để huấn luyện trước khi dự đoán.",
             )
             return
-        profile_id = self.cb_course_profile.currentData()
         try:
             self.btn_predict.setEnabled(False)
             self.lbl_prediction_status.setText("Đang dự đoán…")
