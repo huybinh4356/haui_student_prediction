@@ -1239,6 +1239,30 @@ class MainWindow(QMainWindow):
                 "Khi cột TX2 không có hoặc toàn ô trống, ứng dụng không tự suy luận công thức điểm.",
             )
             return
+
+        tx2_values = (
+            pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
+            if "tx2_score" in self.current_df.columns
+            else pd.Series(np.nan, index=self.current_df.index)
+        )
+        if profile_id == "with_tx2":
+            if tx2_values.isna().any():
+                QMessageBox.warning(
+                    self,
+                    "Thiếu điểm TX2",
+                    "Bạn đã chọn học phần có TX2 nhưng còn bản ghi chưa có điểm TX2. "
+                    "Hãy bổ sung điểm hoặc tách những bản ghi chưa đủ dữ liệu trước khi dự đoán.",
+                )
+                return
+        elif tx2_values.notna().any():
+            QMessageBox.warning(
+                self,
+                "Cấu hình TX2 không khớp dữ liệu",
+                "File đang có điểm TX2 nhưng bạn chọn công thức không có TX2. "
+                "Hãy kiểm tra cấu trúc đánh giá và chọn đúng profile trước khi tính điểm học phần.",
+            )
+            return
+
         if not self._is_model_ready():
             self._update_model_status()
             QMessageBox.warning(
