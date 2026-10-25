@@ -215,11 +215,11 @@ def test_duplicates_block_success(service, tmp_path):
 
 
 
-def test_duplicate_ids_are_trimmed_before_validation(service, tmp_path):
+def test_duplicate_ids_are_normalized_before_validation(service, tmp_path):
     rows = _valid_rows()
-    rows[1]["Mã SV"] = " SV01 "
-    rows[1]["Mã môn"] = "IT101"
-    rows[1]["Học kỳ"] = "2024.1"
+    rows[1]["Mã SV"] = " sv01 "
+    rows[1]["Mã môn"] = " it101 "
+    rows[1]["Học kỳ"] = " 2024.1 "
     path = _write_csv(tmp_path, "dup_spaces.csv", rows)
 
     result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
