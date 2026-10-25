@@ -8,13 +8,13 @@ The MVP uses a weighted rule-based system, not an ML classifier. Risk scores are
 
 | absence_percentage | Status |
 |-------------------:|--------|
-| > 30% | `override_triggered = True`, status "REPEAT_REQUIRED" |
-| 20-30% | High risk |
+| > 75% | `override_triggered = True`, status "REPEAT_REQUIRED" |
+| 20-75% | High risk |
 | 10-<20% | Medium risk |
 | 5-<10% | Low risk |
 | 0-<5% | Very low risk |
 
-At exactly 30%, override does NOT trigger. Above 30%, override is independent of other factors.
+At exactly 75%, the attendance override does not trigger. Above 75%, the override is independent of other factors.
 
 ## Component Weights (Total 100%)
 
@@ -24,7 +24,7 @@ At exactly 30%, override does NOT trigger. Above 30%, override is independent of
 | Academic score | 8% | Lower score = higher risk |
 | LMS participation | 8% | Lower LMS = higher risk |
 | Interaction | 4% | Lower interaction = higher risk |
-| Work part-time | 2% | Neutral (unconfirmed direction) |
+| Work part-time | 2% | Neutral (unconfirmed direction; 50 risk points for either status) |
 | Stress | 1.5% | Higher stress = higher risk (to confirm) |
 | Motivation | 1.5% | Lower motivation = higher risk (to confirm) |
 
@@ -50,7 +50,7 @@ At exactly 30%, override does NOT trigger. Above 30%, override is independent of
 
 ## Important Notes
 
-- All thresholds are **prototype assumptions** pending calibration with HaUI historical data.
-- Missing required fields result in `ValueError` with clear field name, not default risk assignment.
-- `works_part_time` uses neutral mapping (50 risk points) until data confirms direction.
-- This is NOT an official HaUI policy document.
+- Thresholds are prototype assumptions until calibrated against representative HaUI historical data.
+- Missing or non-finite required inputs result in a clear error rather than a fabricated risk value.
+- Part-time employment currently receives a neutral risk contribution because its direction is unconfirmed.
+- This is not an official HaUI policy document.
