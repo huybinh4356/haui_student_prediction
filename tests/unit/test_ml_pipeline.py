@@ -350,17 +350,20 @@ def test_prediction_service_predict_normal(registry, scoring_service, contract):
     assert result["predicted_final_exam_score"].notna().all()
 
 
-def test_prediction_service_predict_missing_feature_raises(registry, scoring_service, contract):
+def test_prediction_service_predicts_when_optional_feature_column_is_absent(registry, scoring_service, contract):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
     registry.save_model(model, "1.0.0", "h", metrics, contract)
 
     svc = PredictionService(registry, scoring_service)
-    # Remove a required feature column
-    bad_df = df_test.drop(columns=["tx1_score"])
-    with pytest.raises(ValueError, match="Missing required feature columns"):
-        svc.predict_student_results(bad_df, "1.0.0", "no_tx2")
+    incomplete_df = df_test.drop(columns=["works_part_time"])
+    result = svc.predict_student_results(incomplete_df, "1.0.0", "no_tx2")
+
+    assert len(result) == len(incomplete_df)
+    assert result["predicted_final_exam_score"].notna().all()
+    assert "works_part_time" not in result.columns
+    assert result["course_score_status"].eq("Đã tính").all()
 
 
 def test_prediction_service_empty_input_raises(registry, scoring_service, contract):
