@@ -571,7 +571,7 @@ class MainWindow(QMainWindow):
         setup_layout.addLayout(row)
         notice = QLabel(
             "Điểm nguy cơ là kết quả theo quy tắc cấu hình, không phải xác suất đã hiệu chuẩn. "
-            "Trạng thái nghỉ học vượt 30% được thể hiện riêng và không bị điểm khảo sát làm mất hiệu lực."
+            "Trạng thái nghỉ học vượt 75% được thể hiện riêng và không bị điểm khảo sát làm mất hiệu lực."
         )
         notice.setWordWrap(True)
         notice.setStyleSheet("color:#7A271A;background:#FEF3F2;border-radius:8px;padding:10px;")
