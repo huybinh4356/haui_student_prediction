@@ -142,7 +142,10 @@ class DataCleaner:
     ) -> pd.DataFrame:
         df_clean = df.copy()
         if "course_id" not in df_clean.columns:
-            df_clean["has_tx2"] = False
+            if "tx2_score" in df_clean.columns:
+                df_clean["has_tx2"] = df_clean["tx2_score"].notna()
+            else:
+                df_clean["has_tx2"] = False
         elif courses_with_tx2:
             df_clean["has_tx2"] = df_clean["course_id"].isin(courses_with_tx2)
         elif "tx2_score" in df_clean.columns:
