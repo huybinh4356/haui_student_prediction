@@ -21,7 +21,7 @@ class RiskCalculator:
         }
 
     def _normalize_absence(self, percentage: float) -> Tuple[float, str]:
-        if percentage > 30:
+        if percentage > 75:
             return 100.0, "REPEAT_REQUIRED"
         if percentage >= 20:
             return 80.0, "high"
@@ -102,5 +102,5 @@ class RiskCalculator:
             absence_status=status,
             weighted_score=total_risk,
             risk_category=self._get_category(total_risk),
-            is_override=(absence_pct > 30)
+            is_override=(absence_pct > 75)
         )
