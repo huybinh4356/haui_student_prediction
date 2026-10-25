@@ -57,6 +57,7 @@ def test_training_dataset_requires_one_historical_label(tmp_path):
     "column_name",
     [
         "Điểm thi cuối kỳ thực tế",
+        "Điểm thi thực tế",
         "Điểm CK thực tế",
         "actual_final_exam_score",
         "target_final_exam_score",

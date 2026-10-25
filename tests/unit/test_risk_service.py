@@ -74,8 +74,9 @@ def test_absence_boundaries(service):
     assert r20.absence_status == "high"
     r30 = service.evaluate_student_risk(_row(absence_percentage=30))
     assert r30.absence_status == "high"
-    r75 = service.evaluate_student_risk(_row(absence_percentage=75))
-    assert r75.absence_status == "high"
+    r31 = service.evaluate_student_risk(_row(absence_percentage=31))
+    assert r31.is_override is True
+    assert r31.absence_status == "REPEAT_REQUIRED"
 
 
 def test_lms_boundaries(service):
