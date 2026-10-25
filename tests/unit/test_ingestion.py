@@ -31,6 +31,38 @@ def service(cleaner, validator):
     return IngestionService(cleaner, validator)
 
 
+def test_column_mapping_normalizes_header_case_spaces_and_aliases(cleaner):
+    source = pd.DataFrame(
+        {
+            " student id ": ["SV01"],
+            "ABSENCE PERCENTAGE": [10.0],
+            "tx1_score": [8.0],
+            "Điểm giữa kỳ": [7.0],
+        }
+    )
+
+    result = cleaner.rename_columns(source)
+
+    assert result.columns.tolist() == [
+        "student_id",
+        "absence_percentage",
+        "tx1_score",
+        "midterm_score",
+    ]
+
+
+def test_column_mapping_rejects_duplicate_aliases(cleaner):
+    source = pd.DataFrame(
+        {
+            "Mã SV": ["SV01"],
+            "student_id": ["SV02"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="same field"):
+        cleaner.rename_columns(source)
+
+
 REQUIRED_COLS = ["student_id", "absence_percentage", "tx1_score", "midterm_score"]
 COURSES_TX2 = ["IT101", "IT102"]
 
