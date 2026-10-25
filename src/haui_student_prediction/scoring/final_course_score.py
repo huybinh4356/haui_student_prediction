@@ -27,12 +27,19 @@ class ScoringService:
 
         profile = self.profiles[profile_id]
 
-        weight_sum = (
-            profile.tx1_weight + profile.tx2_weight
-            + profile.midterm_weight + profile.final_exam_weight
+        weights = (
+            profile.tx1_weight,
+            profile.tx2_weight,
+            profile.midterm_weight,
+            profile.final_exam_weight,
         )
+        if any(not math.isfinite(float(weight)) or float(weight) < 0 for weight in weights):
+            raise ValueError("Weights must be finite and non-negative")
+        weight_sum = sum(float(weight) for weight in weights)
         if abs(weight_sum - 1.0) > 1e-6:
             raise ValueError("Weights must sum to 1.0")
+        if not profile.has_tx2 and abs(float(profile.tx2_weight)) > 1e-6:
+            raise ValueError("A course profile without TX2 must use a zero TX2 weight")
 
         components = {
             "TX1": tx1,
