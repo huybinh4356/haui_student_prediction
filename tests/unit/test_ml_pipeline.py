@@ -219,13 +219,12 @@ def test_train_evaluate_normal(contract):
     assert np.isfinite(metrics.r2)
 
 
-def test_train_evaluate_uses_linear_regression(contract):
-    """Requirement #3: model must be LinearRegression, not Ridge."""
+def test_train_evaluate_uses_xgboost(contract):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, _ = train_and_evaluate(df_train, df_test, contract)
-    from sklearn.linear_model import LinearRegression
-    assert isinstance(model.named_steps["regressor"], LinearRegression)
+    from xgboost import XGBRegressor
+    assert isinstance(model.named_steps["regressor"], XGBRegressor)
 
 
 def test_train_evaluate_no_leakage_small_test(contract):
