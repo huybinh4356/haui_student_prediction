@@ -56,6 +56,8 @@ def _prepare_labeled_data(
         raise ValueError(f"Target column '{target_column}' is missing from {dataset_name} data")
 
     target = pd.to_numeric(dataframe[target_column], errors="coerce")
+    if target.isna().all():
+        raise ValueError(f"{dataset_name} target '{target_column}' is entirely NaN")
     target_values = target.to_numpy(dtype=float, na_value=np.nan)
     valid_mask = np.isfinite(target_values)
     prepared = dataframe.loc[valid_mask].copy()
@@ -63,7 +65,7 @@ def _prepare_labeled_data(
 
     if len(prepared) < minimum_rows:
         raise ValueError(
-            f"{dataset_name} data has {len(prepared)} valid target rows; "
+            f"{dataset_name} data is too small: {len(prepared)} valid target rows; "
             f"at least {minimum_rows} are required"
         )
 
