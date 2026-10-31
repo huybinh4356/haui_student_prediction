@@ -2,7 +2,7 @@ import pandas as pd
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
-from haui_student_prediction.data.cleaning import DataCleaner, PERCENTAGE_COLUMNS
+from haui_student_prediction.data.cleaning import DataCleaner
 from haui_student_prediction.data.column_mapping import is_training_target_column
 from haui_student_prediction.data.validator import (
     FIELD_LABELS,
@@ -73,9 +73,6 @@ class IngestionService:
         # --- collect all error/warning categories ---
         missing_cols = self.validator.validate_required_columns(df_final, required_cols)
 
-        percentage_cols = [c for c in PERCENTAGE_COLUMNS if c in df_final.columns]
-        perc_errors = self.validator.validate_percentages(df_final, percentage_cols)
-
         conversion_errors = self.cleaner.collect_conversion_errors()
         range_errors = self.validator.validate_numeric_ranges(df_final)
 
@@ -120,7 +117,6 @@ class IngestionService:
         )
 
         all_hard_errors: List[Dict[str, Any]] = []
-        all_hard_errors.extend(perc_errors)
         all_hard_errors.extend(conversion_errors)
         all_hard_errors.extend(range_errors)
         # Duplicates are blocking: represent them as explicit error entries too.
@@ -139,7 +135,6 @@ class IngestionService:
         # is_success: False if ANY blocking condition is true.
         is_success = (
             len(missing_cols) == 0
-            and len(perc_errors) == 0
             and len(conversion_errors) == 0
             and len(range_errors) == 0
             and len(duplicate_indices) == 0
