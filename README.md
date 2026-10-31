@@ -6,7 +6,8 @@ Desktop application for analyzing student performance data, predicting final exa
 
 - Python 3.10 or newer
 - Windows 10/11 is the primary development environment
-- XGBoost is used by the primary final-exam score prediction model
+- XGBoost is used by the primary HaUI final-exam score prediction model
+- XGBoost, Random Forest, and CatBoost are used by the separate UCI benchmark comparison
 
 The session dataset store uses Python's built-in `sqlite3` module.
 
@@ -33,10 +34,10 @@ python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```
 
-Verify that XGBoost is installed in the active Python environment:
+Verify that the ML libraries are installed in the active Python environment:
 
 ```powershell
-python -c "import xgboost; print(xgboost.__version__)"
+python -c "import xgboost, catboost; print('XGBoost:', xgboost.__version__); print('CatBoost:', catboost.__version__)"
 ```
 
 Alternatively, install the listed dependencies first and then install the project in editable mode:
@@ -46,7 +47,7 @@ python -m pip install -r requirements.txt
 python -m pip install -e . --no-deps
 ```
 
-On Windows, you can also run `setup.bat` to create or reuse `.venv`, install the project and development dependencies, and verify XGBoost. Start the application with `run.bat`.
+On Windows, you can also run `setup.bat` to create or reuse `.venv`, install the project and development dependencies, and verify XGBoost and CatBoost. Start the application with `run.bat`.
 
 ## Run the application
 
@@ -91,6 +92,25 @@ Prediction data and model-training data are separate.
 
 The historical label must never be used as an input feature or included in the current prediction dataset. The amount and diversity of real historical data affect model reliability.
 
+### UCI benchmark training (separate experimental workflow)
+
+The repository includes an experimental benchmark based on the UCI Student Performance dataset (dataset ID 320). By default, it uses the Portuguese-subject file (student-por.csv, 649 records); Mathematics (student-mat.csv, 395 records) can be selected separately. The two subject files are not concatenated.
+
+Run from the repository root:
+
+    python scripts/train_uci_student_performance.py --subject por
+
+The script downloads and caches the official UCI ZIP archive under data/raw/uci_student_performance/ when the data file is not supplied. That directory is ignored by Git. To use an already downloaded file:
+
+    python scripts/train_uci_student_performance.py --subject por --data-file data/raw/uci_student_performance/student-por.csv
+
+The benchmark keeps only these source attributes: G1, G2, studytime, failures, absences, schoolsup, famsup, paid, higher, and internet. Grades G1, G2, and G3 are divided by two to convert the original 0–20 scale to 0–10. The absence field remains a count of absences; it is not converted into an unsupported percentage. Demographic and unrelated social fields are excluded.
+
+XGBoost, Random Forest, and CatBoost are evaluated on the same held-out test rows. The script writes aggregate metrics and row-level predictions to outputs/uci_model_comparison/, allowing their predictions to be compared record by record.
+
+Important target limitation: UCI defines G3 as the final course/year grade, not as a separately identified final-exam score. The UCI benchmark therefore predicts target_course_grade; it is not registered as the production HaUI final-exam model and must not be presented as a model trained on HaUI exam scores. The production training workflow still requires appropriately labeled historical final-exam data.
+
+Dataset attribution: Cortez, P. (2008), Student Performance, UCI Machine Learning Repository, DOI https://doi.org/10.24432/C5TG7T, CC BY 4.0.
 ## Tests
 
 Run the unit test suite:

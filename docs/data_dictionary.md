@@ -58,3 +58,23 @@
 | snapshot_date | datetime | Prediction cutoff; anti-leakage |
 | source_file | string | Provenance |
 | dataset_version | string | Reproducibility |
+
+## UCI benchmark-only fields
+
+These fields belong to the isolated UCI benchmark workflow and are not aliases for the HaUI production schema.
+
+| Field | Source | Meaning | Scale |
+|-------|--------|---------|-------|
+| period1_grade | G1 | First-period course grade | 0–10 after normalization |
+| period2_grade | G2 | Second-period course grade | 0–10 after normalization |
+| weekly_study_time_level | studytime | Weekly study-time category | 1–4 |
+| past_class_failures | failures | Previous class failures | Count |
+| absence_count | absences | Number of absences | Count, not percentage |
+| extra_school_support | schoolsup | Extra educational support | yes/no |
+| family_education_support | famsup | Family educational support | yes/no |
+| paid_subject_classes | paid | Extra paid classes in the subject | yes/no |
+| higher_education_intent | higher | Wants to pursue higher education | yes/no |
+| home_internet_access | internet | Internet access at home | yes/no |
+| target_course_grade | G3 | Final course/year grade, not a separately identified exam score | 0–10 after normalization |
+
+The benchmark deliberately excludes demographic and unrelated social fields. UCI grades G1, G2, and G3 are provided on a 0–20 scale and are divided by two. The original UCI absence count is retained as a count; it is not converted into a percentage without a denominator.

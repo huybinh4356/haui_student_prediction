@@ -52,3 +52,15 @@ Each registered model stores its version, dataset fingerprint, metrics, feature 
 - Synthetic fixtures are for software tests, not evidence of real-world prediction accuracy.
 - Risk scores are rule-based indicators, not calibrated probabilities.
 - Performance must be re-evaluated using representative historical data.
+
+## UCI Student Performance benchmark (experimental)
+
+A separate experimental workflow uses UCI Student Performance (dataset ID 320). The default subject is Portuguese (student-por.csv, 649 rows); Mathematics (student-mat.csv, 395 rows) can be trained independently. The two subject files are not concatenated because the source does not provide a stable student identifier suitable for grouping across subjects.
+
+Only the following source attributes are selected: G1, G2, studytime, failures, absences, schoolsup, famsup, paid, higher, and internet. G1 and G2 are mapped to period-grade features and all three grade columns are divided by two to fit a 0–10 scale. Absences remains an absence count and is never mislabeled as an absence percentage. Demographic and unrelated social attributes are excluded.
+
+The benchmark compares XGBoost, Random Forest, and CatBoost on the same held-out test rows. Each model has its own preprocessing pipeline; imputers, encoders, and scalers are fitted only on the training partition. The process produces aggregate MAE, RMSE, R², training time, and row-level predictions for direct comparison.
+
+UCI defines G3 as the final course/year grade, while G1 and G2 are the first- and second-period grades. G3 is not a separately identified final-exam score. The UCI benchmark target is therefore named target_course_grade. These models are experimental, are not saved to the active HaUI production model registry, and cannot establish HaUI final-exam prediction accuracy.
+
+Source: Cortez, P. (2008). Student Performance. UCI Machine Learning Repository. https://doi.org/10.24432/C5TG7T. License: CC BY 4.0.
