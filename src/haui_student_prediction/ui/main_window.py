@@ -11,18 +11,17 @@ import pandas as pd
 from matplotlib.backends.backend_qt import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QCloseEvent, QIcon
-from PyQt6.QtGui import QStandardItemModel
+from PyQt6.QtGui import QCloseEvent, QIcon, QStandardItemModel
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
     QFileDialog,
     QFrame,
-    QLayout,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLayout,
     QMainWindow,
     QMessageBox,
     QProgressBar,
