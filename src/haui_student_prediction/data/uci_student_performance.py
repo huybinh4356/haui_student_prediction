@@ -67,8 +67,11 @@ def _archive_has_required_files(archive_path: Path) -> bool:
 def _download_archive(raw_dir: Path) -> Path:
     raw_dir.mkdir(parents=True, exist_ok=True)
     archive_path = raw_dir / "student+performance.zip"
+    manual_archive_path = raw_dir / "student.zip"
 
-    if archive_path.exists() and _archive_has_required_files(archive_path):
+    if _archive_has_required_files(manual_archive_path):
+        return manual_archive_path
+    if _archive_has_required_files(archive_path):
         return archive_path
     archive_path.unlink(missing_ok=True)
 
@@ -106,7 +109,8 @@ def _download_archive(raw_dir: Path) -> Path:
             "Tệp tải về không phải bộ dữ liệu UCI Student Performance hợp lệ. "
             f"Máy chủ trả về Content-Type '{content_type}', URL cuối: {final_url}. "
             "Có thể mạng trường, proxy hoặc phần mềm bảo mật đã thay nội dung tải về. "
-            "Hãy tải student.zip trực tiếp từ trang UCI và chọn tệp CSV tương ứng."
+            "Hãy tải student.zip trực tiếp từ trang UCI và đặt vào thư mục "
+            f"{raw_dir}, sau đó chạy lại. Ứng dụng sẽ tự đọc tệp này."
         ) from exc
 
     archive_path.write_bytes(archive_bytes)
