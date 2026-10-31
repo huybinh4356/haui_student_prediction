@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from haui_student_prediction.data.uci_student_performance import (
+from haui_student_prediction.ml.uci_model_comparison import compare_uci_models\nfrom haui_student_prediction.data.uci_student_performance import (
     CATEGORICAL_FEATURES,
     NUMERICAL_FEATURES,
     TARGET_COLUMN,
@@ -97,3 +97,60 @@ def test_uci_loader_rejects_out_of_range_grade(tmp_path):
             subject="por",
             data_file=source_path,
         )
+
+
+
+def test_uci_model_comparison_uses_cross_validation_inside_training_partition(tmp_path):
+    source_path = tmp_path / "student-por.csv"
+    _make_uci_source(rows=60).to_csv(
+        source_path,
+        index=False,
+        sep=";",
+        encoding="utf-8",
+    )
+    dataframe = load_uci_student_performance(
+        subject="por",
+        data_file=source_path,
+    )
+
+    metrics, predictions = compare_uci_models(
+        dataframe,
+        test_size=0.2,
+        random_state=42,
+        cv_folds=5,
+    )
+
+    assert set(metrics["model"]) == {"XGBoost", "Random Forest", "CatBoost"}
+    assert (metrics["cv_folds"] == 5).all()
+    assert (metrics["train_rows"] == 48).all()
+    assert (metrics["test_rows"] == 12).all()
+    assert len(predictions) == 12
+    assert {
+        "cv_mae_mean",
+        "cv_mae_std",
+        "cv_rmse_mean",
+        "cv_rmse_std",
+        "cv_r2_mean",
+        "cv_r2_std",
+        "mae",
+        "rmse",
+        "r2",
+    }.issubset(metrics.columns)
+    assert metrics["cv_mae_mean"].notna().all()
+
+
+def test_uci_model_comparison_rejects_invalid_cv_folds(tmp_path):
+    source_path = tmp_path / "student-por.csv"
+    _make_uci_source(rows=30).to_csv(
+        source_path,
+        index=False,
+        sep=";",
+        encoding="utf-8",
+    )
+    dataframe = load_uci_student_performance(
+        subject="por",
+        data_file=source_path,
+    )
+
+    with pytest.raises(ValueError, match="cv_folds"):
+        compare_uci_models(dataframe, cv_folds=1)
