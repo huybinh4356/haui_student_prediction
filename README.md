@@ -75,6 +75,10 @@ Import workflow:
 3. Review errors, warnings, duplicate rows, and any incomplete duplicate checks.
 4. Confirm the import.
 
+Input ranges are checked before data is accepted: percentages must be 0-100, TX1/TX2/midterm and historical final-exam scores must be 0-10, and interaction/stress/motivation survey scores must be 1-5. Values outside these ranges block import or model training instead of being silently clipped.
+
+For academic-risk evaluation, each record needs absence percentage, LMS percentage, interaction, stress, motivation, and the calculated course score. Missing risk-only columns or cells are reported as warnings; the final-exam score prediction can still run, but risk is marked as not evaluated for affected records and the missing fields are shown. No risk value is imputed with an invented zero or average.
+
 Duplicate detection uses `student_id`, `course_id`, and `semester` together. If a key column or a row's key value is missing, the application warns that duplicate detection is incomplete for those records instead of treating missing key values as a confirmed duplicate.
 
 An import is not reported as successful if writing the validated dataset to SQLite fails.
