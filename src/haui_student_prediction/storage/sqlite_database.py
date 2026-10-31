@@ -1,14 +1,18 @@
 from pathlib import Path
 import sqlite3
+
 import pandas as pd
 
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
-_DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "student_data.db"
+from haui_student_prediction.app_config import get_project_root
 
 
 class SQLiteDatabase:
     def __init__(self, db_path: Path | str | None = None):
-        self.db_path = Path(db_path) if db_path else _DEFAULT_DB_PATH
+        self.db_path = (
+            Path(db_path).expanduser().resolve()
+            if db_path is not None
+            else (get_project_root() / "data" / "student_data.db").resolve()
+        )
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     def get_connection(self):

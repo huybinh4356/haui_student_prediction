@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import List
 
+from haui_student_prediction.data.column_mapping import is_training_target_column
+
 # Columns that must NEVER appear in features:
 #   - identifiers (leak unique info, no generalisation)
 #   - target column (direct leakage)
@@ -39,6 +41,15 @@ class FeatureContract:
         if leaked_ids:
             raise ValueError(
                 f"Identifier columns must not be features: {sorted(leaked_ids)}"
+            )
+
+        leaked_targets = sorted(
+            column for column in all_feats
+            if is_training_target_column(column)
+        )
+        if leaked_targets:
+            raise ValueError(
+                f"Historical or actual final-exam target columns must not be features (target leakage): {leaked_targets}"
             )
 
         if self.target_column in all_feats:

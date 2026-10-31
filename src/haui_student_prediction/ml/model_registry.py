@@ -8,7 +8,7 @@ from haui_student_prediction.ml.train_regressor import ModelMetrics
 from haui_student_prediction.features.feature_contract import FeatureContract
 
 
-ACTIVE_MODEL_VERSION = "xgboost-1.0.0"
+ACTIVE_MODEL_VERSION = "xgboost-2.0.0"
 
 
 class ModelRegistry:
@@ -23,6 +23,7 @@ class ModelRegistry:
     def __init__(self, registry_path: str, artifacts_dir: str):
         self.registry_path = Path(registry_path)
         self.artifacts_dir = Path(artifacts_dir)
+        self.registry_path.parent.mkdir(parents=True, exist_ok=True)
         self.artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         if not self.registry_path.exists():

@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 from haui_student_prediction.risk.risk_calculator import RiskCalculator
 from haui_student_prediction.services.risk_prediction_service import RiskPredictionService
+from haui_student_prediction.services.risk_service import StudentRiskService
 
 
 @pytest.fixture
@@ -29,35 +30,36 @@ def test_missing_absence_raises(service):
         service.evaluate_student_risk(_row(absence_percentage=np.nan))
 
 
-def test_missing_works_part_time_raises(service):
-    with pytest.raises(ValueError, match="works_part_time"):
-        service.evaluate_student_risk(_row(works_part_time=np.nan))
+def test_missing_part_time_field_uses_neutral_risk_mapping(service):
+    row = _row().drop(labels=["works_part_time"])
+    result = service.evaluate_student_risk(row)
+
+    assert 0 <= result.weighted_score <= 100
 
 
-def test_nan_works_part_time_not_true(service):
-    """NaN must not be silently treated as True."""
-    with pytest.raises(ValueError):
-        service.evaluate_student_risk(_row(works_part_time=np.nan))
+def test_part_time_status_uses_neutral_risk_mapping(service):
+    not_working = service.evaluate_student_risk(_row(works_part_time=False))
+    working = service.evaluate_student_risk(_row(works_part_time=True))
+    missing = service.evaluate_student_risk(_row().drop(labels=["works_part_time"]))
 
-
-def test_works_part_time_string_false(service):
-    r = service.evaluate_student_risk(_row(works_part_time="False"))
-    assert r.weighted_score >= 0
-
-
-def test_works_part_time_string_true(service):
-    r = service.evaluate_student_risk(_row(works_part_time="True"))
-    assert r.weighted_score >= 0
-
-
-def test_absence_override_at_31(service):
-    r = service.evaluate_student_risk(_row(absence_percentage=31))
-    assert r.is_override is True
-    assert r.absence_status == "REPEAT_REQUIRED"
+    assert working.weighted_score == not_working.weighted_score
+    assert missing.weighted_score == not_working.weighted_score
 
 
 def test_absence_no_override_at_30(service):
     r = service.evaluate_student_risk(_row(absence_percentage=30))
+    assert r.is_override is False
+    assert r.absence_status == "high"
+
+
+def test_absence_override_just_above_30(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=30.01))
+    assert r.is_override is True
+    assert r.absence_status == "REPEAT_REQUIRED"
+
+
+def test_absence_no_override_below_30(service):
+    r = service.evaluate_student_risk(_row(absence_percentage=29.99))
     assert r.is_override is False
 
 
@@ -72,6 +74,9 @@ def test_absence_boundaries(service):
     assert r20.absence_status == "high"
     r30 = service.evaluate_student_risk(_row(absence_percentage=30))
     assert r30.absence_status == "high"
+    r31 = service.evaluate_student_risk(_row(absence_percentage=31))
+    assert r31.is_override is True
+    assert r31.absence_status == "REPEAT_REQUIRED"
 
 
 def test_lms_boundaries(service):
@@ -97,3 +102,63 @@ def test_weights_sum_to_one():
 def test_risk_score_in_range(service):
     r = service.evaluate_student_risk(_row())
     assert 0 <= r.weighted_score <= 100
+
+
+
+
+
+def test_risk_validation_reports_all_missing_required_fields(service):
+    row = _row().drop(
+        labels=[
+            "absence_percentage",
+            "lms_learning_percentage",
+            "interaction_score",
+            "stress_score",
+            "motivation_score",
+        ]
+    )
+
+    issues = service.validate_student_record(row)
+
+    assert len(issues) == 5
+    assert any("absence_percentage" in issue for issue in issues)
+    assert any("lms_learning_percentage" in issue for issue in issues)
+    assert any("interaction_score" in issue for issue in issues)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("absence_percentage", 100.1),
+        ("lms_learning_percentage", -0.1),
+        ("predicted_course_score", 10.1),
+        ("interaction_score", 5.1),
+        ("stress_score", 0.9),
+        ("motivation_score", 6.0),
+    ],
+)
+def test_risk_validation_rejects_values_outside_configured_ranges(service, field, value):
+    issues = service.validate_student_record(_row(**{field: value}))
+
+    assert issues
+    assert field in issues[0]
+
+
+def test_risk_evaluation_refuses_invalid_inputs_without_fabricating_a_score(service):
+    with pytest.raises(ValueError, match="interaction_score"):
+        service.evaluate_student_risk(_row(interaction_score=6.0))
+
+
+def test_risk_validation_accepts_boundary_values(service):
+    row = _row(
+        absence_percentage=0.0,
+        lms_learning_percentage=100.0,
+        predicted_course_score=10.0,
+        interaction_score=1.0,
+        stress_score=5.0,
+        motivation_score=1.0,
+    )
+
+    assert service.validate_student_record(row) == []
+    result = service.evaluate_student_risk(row)
+    assert 0 <= result.weighted_score <= 100

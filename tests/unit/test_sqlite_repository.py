@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 
 from haui_student_prediction.storage.dataset_repository import DataRepository
+from haui_student_prediction.storage.sqlite_database import SQLiteDatabase
 
 
 def test_save_and_read_session_data(tmp_path):
@@ -55,3 +56,20 @@ def test_import_replaces_previous_session(tmp_path):
     actual = repository.get_session_data()
 
     assert actual["student_id"].tolist() == ["S002"]
+
+def test_default_database_path_uses_current_project_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_BASE_DIR", str(tmp_path))
+
+    repository = DataRepository()
+
+    assert repository.db_path == (tmp_path / "data" / "session_student.db").resolve()
+
+
+
+
+def test_legacy_sqlite_database_uses_project_root(tmp_path, monkeypatch):
+    monkeypatch.setenv("APP_BASE_DIR", str(tmp_path))
+
+    database = SQLiteDatabase()
+
+    assert database.db_path == (tmp_path / "data" / "student_data.db").resolve()

@@ -22,8 +22,10 @@ models/artifacts/*
 !models/artifacts/.gitkeep
 outputs/eda/*
 outputs/reports/*
+outputs/uci_model_comparison/*
 !outputs/eda/.gitkeep
 !outputs/reports/.gitkeep
+!outputs/uci_model_comparison/.gitkeep
 
 # Environment and Secrets
 .env
