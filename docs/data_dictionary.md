@@ -65,7 +65,7 @@
 - Academic scores `tx1_score`, `tx2_score`, `midterm_score`, and the historical target `target_final_exam_score` must be within 0-10.
 - Survey fields `interaction_score`, `stress_score`, and `motivation_score` must be within 1-5.
 - Risk evaluation requires absence percentage, LMS percentage, interaction, stress, motivation, and a calculated `predicted_course_score` within 0-10.
-- Missing risk inputs do not block a valid grade prediction. The affected record is marked as not evaluated for risk and lists the missing or invalid fields. The system never fills missing risk values with invented values.
+- Missing risk inputs do not block a valid grade prediction. The affected record is marked as not evaluated for risk and lists the missing fields. Values outside the configured ranges are rejected during import or historical training. The system never fills missing risk values with invented values.
 - `works_part_time` remains optional in the risk engine and currently uses a neutral contribution until its effect is supported by evidence.
 
 ## UCI benchmark-only fields
