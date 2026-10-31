@@ -45,6 +45,7 @@ def main() -> None:
         help="Directory used to cache the downloaded UCI ZIP archive.",
     )
     parser.add_argument("--test-size", type=float, default=0.2)
+    parser.add_argument("--cv-folds", type=int, default=5)
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument(
         "--output-dir",
@@ -55,6 +56,8 @@ def main() -> None:
 
     if not 0.1 <= args.test_size <= 0.4:
         parser.error("--test-size phải nằm trong khoảng 0.1 đến 0.4")
+    if args.cv_folds < 2:
+        parser.error("--cv-folds phải lớn hơn hoặc bằng 2")
 
     data_file = resolve_project_path(args.data_file) if args.data_file else None
     raw_dir = resolve_project_path(args.raw_dir)
@@ -69,6 +72,7 @@ def main() -> None:
         dataframe,
         test_size=args.test_size,
         random_state=args.random_state,
+        cv_folds=args.cv_folds,
     )
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -89,6 +93,10 @@ def main() -> None:
                 f"numerical_features={','.join(NUMERICAL_FEATURES)}",
                 f"categorical_features={','.join(CATEGORICAL_FEATURES)}",
                 f"test_size={args.test_size}",
+                f"cv_folds={args.cv_folds}",
+                "validation_strategy=k-fold cross-validation inside the training partition",
+                "model_selection_metric=mean cross-validation MAE",
+                "test_usage=final holdout evaluation only",
                 f"random_state={args.random_state}",
                 f"license={UCI_DATASET_LICENSE}",
                 f"doi={UCI_DATASET_DOI}",
@@ -103,9 +111,11 @@ def main() -> None:
     print(f"Records: {len(dataframe)}")
     print(f"Features: {len(NUMERICAL_FEATURES) + len(CATEGORICAL_FEATURES)}")
     print("Target: G3 final course grade (0-10 scale)")
+    print(f"Validation: {args.cv_folds}-fold CV inside the training partition")
+    print("The held-out test partition is not used to select the best model.")
     print("\nModel comparison:")
     print(metrics.to_string(index=False, float_format=lambda value: f"{value:.4f}"))
-    print(f"\nBest model by MAE: {metrics.iloc[0]['model']}")
+    print(f"\nBest model by CV MAE: {metrics.iloc[0]['model']}")
     print(f"Metrics: {metrics_path}")
     print(f"Test predictions: {predictions_path}")
     print(f"Metadata: {metadata_path}")
