@@ -451,3 +451,72 @@ def test_midterm_exam_header_maps_to_midterm_score(cleaner):
     result = cleaner.rename_columns(dataframe)
 
     assert result.columns.tolist() == ["midterm_score"]
+
+
+
+def test_academic_score_outside_zero_to_ten_blocks_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm TX1"] = "10.5"
+    path = _write_csv(tmp_path, "score_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    assert result.data is None
+    errors = [error for error in result.errors if error["kind"] == "score_out_of_range"]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "tx1_score"
+    assert errors[0]["row"] == 0
+
+
+def test_survey_score_outside_one_to_five_blocks_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Mức độ stress"] = "6"
+    path = _write_csv(tmp_path, "survey_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    errors = [error for error in result.errors if error["kind"] == "score_out_of_range"]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "stress_score"
+
+
+def test_missing_risk_inputs_warn_without_blocking_student_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Tỷ lệ học LMS"] = ""
+    path = _write_csv(tmp_path, "risk_inputs_missing.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data is not None
+    warnings = [
+        warning for warning in result.warnings
+        if warning["kind"] == "risk_data_incomplete"
+    ]
+    assert any(
+        warning["column"] == "lms_learning_percentage"
+        and warning["missing_rows"] == 1
+        for warning in warnings
+    )
+    assert any(
+        warning["column"] == "interaction_score"
+        and warning["missing_column"] is True
+        for warning in warnings
+    )
+
+
+def test_percentage_range_is_reported_once(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Tỷ lệ nghỉ"] = "101"
+    path = _write_csv(tmp_path, "percentage_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    errors = [
+        error for error in result.errors
+        if error["kind"] == "percentage_out_of_range"
+    ]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "absence_percentage"
