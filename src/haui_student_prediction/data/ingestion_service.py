@@ -4,7 +4,11 @@ from dataclasses import dataclass, field
 from typing import Dict, Any, List, Optional
 from haui_student_prediction.data.cleaning import DataCleaner, PERCENTAGE_COLUMNS
 from haui_student_prediction.data.column_mapping import is_training_target_column
-from haui_student_prediction.data.validator import DataValidator
+from haui_student_prediction.data.validator import (
+    FIELD_LABELS,
+    RISK_REQUIRED_INPUTS,
+    DataValidator,
+)
 
 @dataclass
 class IngestionResult:
@@ -73,6 +77,32 @@ class IngestionService:
         perc_errors = self.validator.validate_percentages(df_final, percentage_cols)
 
         conversion_errors = self.cleaner.collect_conversion_errors()
+        range_errors = self.validator.validate_numeric_ranges(df_final)
+
+        risk_data_warnings: List[Dict[str, Any]] = []
+        for column in RISK_REQUIRED_INPUTS:
+            if column not in df_final.columns:
+                missing_rows = len(df_final)
+                missing_column = True
+            else:
+                missing_rows = int(df_final[column].isna().sum())
+                missing_column = False
+            if missing_rows:
+                risk_data_warnings.append(
+                    {
+                        "column": column,
+                        "label": FIELD_LABELS.get(column, column),
+                        "missing_rows": missing_rows,
+                        "total_rows": len(df_final),
+                        "missing_column": missing_column,
+                        "kind": "risk_data_incomplete",
+                        "note": (
+                            "Thiếu cột đầu vào cần thiết để đánh giá nguy cơ."
+                            if missing_column
+                            else "Có bản ghi thiếu giá trị đầu vào để đánh giá nguy cơ."
+                        ),
+                    }
+                )
 
         duplicate_key_columns = ["student_id", "course_id", "semester"]
         unavailable_duplicate_keys = [
@@ -89,20 +119,10 @@ class IngestionService:
             df_final, duplicate_key_columns
         )
 
-        # Score scale: no explicit config -> notes only (do not block).
-        score_cols = [
-            c for c in [
-                "tx1_score", "tx2_score", "midterm_score",
-            ]
-            if c in df_final.columns
-        ]
-        _score_errors, score_notes = self.validator.validate_score_scale(
-            df_final, score_cols, max_score=None,
-        )
-
         all_hard_errors: List[Dict[str, Any]] = []
         all_hard_errors.extend(perc_errors)
         all_hard_errors.extend(conversion_errors)
+        all_hard_errors.extend(range_errors)
         # Duplicates are blocking: represent them as explicit error entries too.
         if duplicate_indices:
             all_hard_errors.append({
@@ -121,6 +141,7 @@ class IngestionService:
             len(missing_cols) == 0
             and len(perc_errors) == 0
             and len(conversion_errors) == 0
+            and len(range_errors) == 0
             and len(duplicate_indices) == 0
         )
 
@@ -131,7 +152,7 @@ class IngestionService:
             missing_columns=missing_cols,
             duplicate_indices=[int(i) for i in duplicate_indices],
             warnings=[
-                *score_notes,
+                *risk_data_warnings,
                 *(
                     [{
                         "column": ",".join(unavailable_duplicate_keys),
