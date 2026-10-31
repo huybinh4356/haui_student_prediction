@@ -1057,7 +1057,7 @@ class MainWindow(QMainWindow):
         frame_layout.addWidget(intro)
         row = QHBoxLayout()
         self.cb_report_type = QComboBox()
-        self.cb_report_type.addItem("Bộ dữ liệu đã nhập", "bộ dữ liệu")
+        self.cb_report_type.addItem("Bộ dữ liệu đã nhập", "dataset")
         self.cb_report_type.addItem("Kết quả dự đoán điểm", "prediction")
         self.cb_report_type.addItem("Kết quả nguy cơ học vụ", "risk")
         row.addWidget(self.cb_report_type, 1)
@@ -1918,12 +1918,12 @@ class MainWindow(QMainWindow):
         for index in range(self.cb_report_type.count() - 1, -1, -1):
             key = self.cb_report_type.itemData(index)
             available = (
-                (key == "bộ dữ liệu" and self.current_df is not None)
+                (key == "dataset" and self.current_df is not None)
                 or (key == "prediction" and self.prediction_df is not None)
                 or (key == "risk" and self.risk_df is not None)
             )
             self.cb_report_type.setItemText(index, {
-                "bộ dữ liệu": "Bộ dữ liệu đã nhập",
+                "dataset": "Bộ dữ liệu đã nhập",
                 "prediction": "Kết quả dự đoán điểm",
                 "risk": "Kết quả nguy cơ học vụ",
             }.get(key, str(key)))
@@ -1936,7 +1936,7 @@ class MainWindow(QMainWindow):
 
     def _get_report_dataframe(self, report_type: str) -> pd.DataFrame:
         mapping = {
-            "bộ dữ liệu": self.current_df,
+            "dataset": self.current_df,
             "prediction": self.prediction_df,
             "risk": self.risk_df,
         }
@@ -1956,7 +1956,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Chưa có dữ liệu để xuất", self._user_error(exc))
             return
         default_name = {
-            "bộ dữ liệu": "haui_dataset_cleaned.xlsx",
+            "dataset": "haui_dataset_cleaned.xlsx",
             "prediction": "haui_score_predictions.xlsx",
             "risk": "haui_academic_risk.xlsx",
         }.get(report_type, "haui_report.xlsx")
