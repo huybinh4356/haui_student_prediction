@@ -675,7 +675,9 @@ class MainWindow(QMainWindow):
         setup_layout.addLayout(row)
         notice = QLabel(
             "Điểm nguy cơ là kết quả theo quy tắc cấu hình, không phải xác suất đã hiệu chuẩn. "
-            "Trạng thái nghỉ học vượt 30% được thể hiện riêng và không bị điểm khảo sát làm mất hiệu lực."
+            "Cần có tỷ lệ nghỉ học, tỷ lệ học LMS, mức tương tác, căng thẳng và động lực học tập. "
+            "Bản ghi thiếu hoặc sai thang dữ liệu sẽ được đánh dấu chưa đánh giá, không tự điền giá trị. "
+            "Trạng thái nghỉ học trên 30% được thể hiện riêng."
         )
         notice.setWordWrap(True)
         notice.setStyleSheet("color:#7A271A;background:#FEF3F2;border-radius:8px;padding:10px;")
@@ -1374,7 +1376,7 @@ class MainWindow(QMainWindow):
                 QMessageBox.information(
                     self,
                     "Đã nhập dữ liệu kèm cảnh báo",
-                    "Dữ liệu đã được nạp nhưng cần xem các cảnh báo thang điểm hoặc chất lượng trước khi phân tích tiếp.",
+                    self.lbl_quality_summary.text(),
                 )
         except Exception as exc:
             logging.exception("Dataset import failed")
@@ -1394,6 +1396,21 @@ class MainWindow(QMainWindow):
         if "absence_percentage" in dataframe.columns:
             values = pd.to_numeric(dataframe["absence_percentage"], errors="coerce")
             lines.append(f"Bản ghi nghỉ học trên 30%: {int((values > 30).sum()):,}")
+        risk_warnings = [
+            warning for warning in warnings
+            if warning.get("kind") == "risk_data_incomplete"
+        ]
+        if risk_warnings:
+            lines.append("Dữ liệu đánh giá nguy cơ:")
+            for warning in risk_warnings:
+                label = warning.get("label", warning.get("column", "Trường dữ liệu"))
+                missing_rows = int(warning.get("missing_rows", 0))
+                total_rows = int(warning.get("total_rows", len(dataframe)))
+                if warning.get("missing_column"):
+                    detail = "thiếu cả cột"
+                else:
+                    detail = f"thiếu {missing_rows:,}/{total_rows:,} bản ghi"
+                lines.append(f"- {label}: {detail}")
         return "\n".join(lines)
 
     def _refresh_data_table(self) -> None:
@@ -1437,6 +1454,8 @@ class MainWindow(QMainWindow):
             "risk_category": "Mức nguy cơ học vụ",
             "override_triggered": "Kích hoạt ngưỡng bắt buộc",
             "evaluation_status": "Trạng thái đánh giá",
+            "missing_risk_fields": "Lý do chưa đánh giá nguy cơ",
+            "academic_risk_missing_fields": "Lý do chưa đánh giá nguy cơ",
             "academic_risk_score": "Điểm nguy cơ học vụ",
             "academic_risk_category": "Mức nguy cơ học vụ",
             "academic_risk_override": "Trạng thái vượt ngưỡng nghỉ học",
@@ -1802,41 +1821,14 @@ class MainWindow(QMainWindow):
                 course_profile_id=profile_id,
             )
 
-            risk_rows = []
-            for row_number, (_, row) in enumerate(results.iterrows(), start=1):
-                student_id = str(row.get("student_id", f"Bản ghi {row_number}"))
-                try:
-                    risk_result = self.risk_service.evaluate_student_risk(row)
-                    override = bool(risk_result.is_override)
-                    risk_rows.append(
-                        {
-                            "student_id": student_id,
-                            "absence_status": "HOC_LAI" if override else self._absence_label(risk_result.absence_status),
-                            "weighted_score": round(float(risk_result.weighted_score), 2),
-                            "risk_category": self._risk_label(risk_result.risk_category),
-                            "override_triggered": override,
-                            "evaluation_status": "Đã đánh giá",
-                        }
-                    )
-                except Exception as exc:
-                    risk_rows.append(
-                        {
-                            "student_id": student_id,
-                            "absence_status": "Chưa xác định",
-                            "weighted_score": np.nan,
-                            "risk_category": "Chưa đủ dữ liệu",
-                            "override_triggered": False,
-                            "evaluation_status": self._user_error(exc),
-                        }
-                    )
-
-            self.risk_df = pd.DataFrame(risk_rows)
+            self.risk_df = self._evaluate_risk_dataframe(results)
             risk_columns = self.risk_df.drop(columns=["student_id"]).rename(
                 columns={
                     "weighted_score": "academic_risk_score",
                     "risk_category": "academic_risk_category",
                     "override_triggered": "academic_risk_override",
                     "evaluation_status": "academic_risk_status",
+                    "missing_risk_fields": "academic_risk_missing_fields",
                 }
             )
             results = pd.concat(
@@ -1845,18 +1837,76 @@ class MainWindow(QMainWindow):
             )
             self.prediction_df = results.copy(deep=True)
             self._populate_table(self.table_predict, self.prediction_df)
+            evaluated_count = int(self.risk_df["weighted_score"].notna().sum())
+            incomplete_count = len(self.risk_df) - evaluated_count
             self.lbl_prediction_status.setText(
-                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng XGBoost {ACTIVE_MODEL_VERSION}. Bảng kết quả gồm điểm cuối kỳ dự kiến, điểm học phần dự kiến và đánh giá nguy cơ học vụ."
+                f"Đã dự đoán {len(self.prediction_df):,} bản ghi bằng XGBoost {ACTIVE_MODEL_VERSION}; "
+                f"đánh giá nguy cơ {evaluated_count:,}/{len(self.risk_df):,} bản ghi."
             )
             self._refresh_report_options()
             self._update_dashboard()
-            QMessageBox.information(self, "Dự đoán hoàn tất", f"Đã tạo kết quả dự đoán cho {len(self.prediction_df):,} bản ghi.")
+            message = (
+                f"Đã dự đoán điểm cho {len(self.prediction_df):,} bản ghi. "
+                f"Đánh giá nguy cơ hoàn tất cho {evaluated_count:,}/{len(self.risk_df):,} bản ghi."
+            )
+            if incomplete_count:
+                message += (
+                    f"\\n{incomplete_count:,} bản ghi chưa đủ hoặc sai dữ liệu nguy cơ. "
+                    "Mở trang Dự đoán nguy cơ học vụ và xem cột Lý do chưa đánh giá nguy cơ."
+                )
+            QMessageBox.information(self, "Dự đoán hoàn tất", message)
         except Exception as exc:
             logging.exception("Score prediction failed")
             self.lbl_prediction_status.setText("Dự đoán thất bại. Kiểm tra cấu trúc đặc trưng và dữ liệu đầu vào.")
             QMessageBox.critical(self, "Không thể dự đoán", self._user_error(exc))
         finally:
             self.btn_predict.setEnabled(True)
+
+    def _evaluate_risk_dataframe(self, source: pd.DataFrame) -> pd.DataFrame:
+        rows = []
+        for row_number, (_, row) in enumerate(source.iterrows(), start=1):
+            student_id = str(row.get("student_id", f"Bản ghi {row_number}"))
+            issues = self.risk_service.validate_student_record(row)
+            if issues:
+                rows.append(
+                    {
+                        "student_id": student_id,
+                        "absence_status": "Chưa xác định",
+                        "weighted_score": np.nan,
+                        "risk_category": "Chưa đủ dữ liệu",
+                        "override_triggered": False,
+                        "evaluation_status": "Chưa đánh giá",
+                        "missing_risk_fields": "; ".join(issues),
+                    }
+                )
+                continue
+            try:
+                result = self.risk_service.evaluate_student_risk(row)
+                is_override = bool(result.is_override)
+                rows.append(
+                    {
+                        "student_id": student_id,
+                        "absence_status": "HOC_LAI" if is_override else self._absence_label(result.absence_status),
+                        "weighted_score": round(float(result.weighted_score), 2),
+                        "risk_category": self._risk_label(result.risk_category),
+                        "override_triggered": is_override,
+                        "evaluation_status": "Đã đánh giá",
+                        "missing_risk_fields": "",
+                    }
+                )
+            except Exception as exc:
+                rows.append(
+                    {
+                        "student_id": student_id,
+                        "absence_status": "Chưa xác định",
+                        "weighted_score": np.nan,
+                        "risk_category": "Chưa đủ dữ liệu",
+                        "override_triggered": False,
+                        "evaluation_status": "Lỗi đánh giá",
+                        "missing_risk_fields": self._user_error(exc),
+                    }
+                )
+        return pd.DataFrame(rows)
 
     def _handle_risk(self) -> None:
         source = self.prediction_df
@@ -1869,49 +1919,29 @@ class MainWindow(QMainWindow):
                 "Hãy hoàn thành dự đoán điểm học phần trước khi tính nguy cơ học vụ.",
             )
             return
-        rows = []
-        errors = 0
-        for row_number, (_, row) in enumerate(source.iterrows(), start=1):
-            student_id = str(row.get("student_id", f"Bản ghi {row_number}"))
-            try:
-                result = self.risk_service.evaluate_student_risk(row)
-                is_override = bool(result.is_override)
-                category = self._risk_label(result.risk_category)
-                rows.append(
-                    {
-                        "student_id": student_id,
-                        "absence_status": "HOC_LAI" if is_override else self._absence_label(result.absence_status),
-                        "weighted_score": round(float(result.weighted_score), 2),
-                        "risk_category": category,
-                        "override_triggered": is_override,
-                        "evaluation_status": "Đã đánh giá",
-                    }
-                )
-            except Exception as exc:
-                errors += 1
-                rows.append(
-                    {
-                        "student_id": student_id,
-                        "absence_status": "Chưa xác định",
-                        "weighted_score": np.nan,
-                        "risk_category": "Chưa đủ dữ liệu",
-                        "override_triggered": False,
-                        "evaluation_status": self._user_error(exc),
-                    }
-                )
-        self.risk_df = pd.DataFrame(rows)
+
+        self.risk_df = self._evaluate_risk_dataframe(source)
         self._populate_table(self.table_risk, self.risk_df)
         valid_scores = pd.to_numeric(self.risk_df["weighted_score"], errors="coerce")
         valid = valid_scores.notna() & np.isfinite(valid_scores.astype(float))
+        evaluated_count = int(valid.sum())
+        incomplete_count = len(self.risk_df) - evaluated_count
         overrides = int(self.risk_df.loc[valid, "override_triggered"].astype(bool).sum()) if valid.any() else 0
         high_categories = {"Cao", "Rất cao"}
         high_count = int(self.risk_df.loc[valid, "risk_category"].isin(high_categories).sum()) if valid.any() else 0
-        self.card_risk_evaluated.set_value(f"{int(valid.sum()):,}", f"Tổng bản ghi: {len(self.risk_df):,}", "green")
+        self.card_risk_evaluated.set_value(
+            f"{evaluated_count:,}",
+            f"Tổng bản ghi: {len(self.risk_df):,}",
+            "green",
+        )
         self.card_risk_override.set_value(f"{overrides:,}", "Trạng thái học lại", "red")
         self.card_risk_high.set_value(f"{high_count:,}", "Nguy cơ cao hoặc rất cao", "amber")
         self.lbl_risk_status.setText(
-            f"Đã đánh giá {int(valid.sum()):,}/{len(self.risk_df):,} bản ghi."
-            + (f" {errors:,} bản ghi chưa đủ dữ liệu hoặc gặp lỗi; xem cột evaluation_status." if errors else "")
+            f"Đã đánh giá nguy cơ {evaluated_count:,}/{len(self.risk_df):,} bản ghi."
+            + (
+                f" {incomplete_count:,} bản ghi chưa được đánh giá; xem cột “Lý do chưa đánh giá nguy cơ”."
+                if incomplete_count else ""
+            )
         )
         self._refresh_report_options()
         self._update_dashboard()
