@@ -106,11 +106,14 @@ The script downloads and caches the official UCI ZIP archive under data/raw/uci_
 
 The benchmark keeps only these source attributes: G1, G2, studytime, failures, absences, schoolsup, famsup, paid, higher, and internet. Grades G1, G2, and G3 are divided by two to convert the original 0–20 scale to 0–10. The absence field remains a count of absences; it is not converted into an unsupported percentage. Demographic and unrelated social fields are excluded.
 
-The desktop application includes a Vietnamese page named “Huấn luyện và so sánh” for running the UCI experiment and viewing its results without using the command line. The page uses the same benchmark workflow described below and does not replace the HaUI production model.\n\nThe data is split once into 80% Training and 20% held-out Testing. Five-fold cross-validation runs only inside the 80% Training partition: in each fold, four parts are used to fit the pipeline and the remaining part acts as Validation. This provides validation metrics without reserving a separate fixed validation set. XGBoost, Random Forest, and CatBoost use the same folds and the same untouched Test rows. The best model is ranked by mean cross-validation MAE; the Test metrics are reported only for final evaluation. Preprocessing is fitted independently inside each fold to prevent information leakage. The script writes cross-validation mean/standard deviation, holdout metrics, and row-level test predictions to outputs/uci_model_comparison/.
+The desktop application includes a Vietnamese page named “Huấn luyện và so sánh” for running the UCI experiment and viewing its results without using the command line. The page uses the same benchmark workflow described below and does not replace the HaUI production model.
+
+The data is split once into 80% Training and 20% held-out Testing. Five-fold cross-validation runs only inside the 80% Training partition: in each fold, four parts are used to fit the pipeline and the remaining part acts as Validation. This provides validation metrics without reserving a separate fixed validation set. XGBoost, Random Forest, and CatBoost use the same folds and the same untouched Test rows. The best model is ranked by mean cross-validation MAE; the Test metrics are reported only for final evaluation. Preprocessing is fitted independently inside each fold to prevent information leakage. The script writes cross-validation mean/standard deviation, holdout metrics, and row-level test predictions to outputs/uci_model_comparison/.
 
 Important target limitation: UCI defines G3 as the final course/year grade, not as a separately identified final-exam score. The UCI benchmark therefore predicts target_course_grade; it is not registered as the production HaUI final-exam model and must not be presented as a model trained on HaUI exam scores. The production training workflow still requires appropriately labeled historical final-exam data.
 
 Dataset attribution: Cortez, P. (2008), Student Performance, UCI Machine Learning Repository, DOI https://doi.org/10.24432/C5TG7T, CC BY 4.0.
+
 ## Tests
 
 Run the unit test suite:
