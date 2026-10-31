@@ -1,5 +1,4 @@
 from io import BytesIO
-from pathlib import Path
 from zipfile import ZipFile
 
 import pandas as pd
@@ -221,3 +220,18 @@ def test_uci_download_reports_non_zip_server_response(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="Content-Type 'text/html"):
         uci_data._download_archive(tmp_path)
+
+
+def test_uci_download_uses_manually_downloaded_student_zip(tmp_path, monkeypatch):
+    manual_archive = tmp_path / "student.zip"
+    manual_archive.write_bytes(_make_uci_zip())
+
+    def unexpected_download(request, timeout):
+        raise AssertionError("The manual UCI archive should be used without downloading.")
+
+    monkeypatch.setattr(uci_data, "urlopen", unexpected_download)
+
+    archive_path = uci_data._download_archive(tmp_path)
+
+    assert archive_path == manual_archive
+    assert uci_data._archive_has_required_files(archive_path)
