@@ -1183,8 +1183,8 @@ class MainWindow(QMainWindow):
                 self.card_absence.set_value(f"{override_count:,}", "Tỷ lệ nghỉ học > 30%", "red")
             else:
                 override_count = 0
-                self.card_absence.set_value("—", "Không có cột absence_percentage", "amber")
-            self.card_records.set_value(f"{len(df):,}", f"{len(df.columns)} cột trong dataset", "blue")
+                self.card_absence.set_value("—", "Không có cột tỷ lệ nghỉ học", "amber")
+            self.card_records.set_value(f"{len(df):,}", f"{len(df.columns)} cột trong bộ dữ liệu", "blue")
             self.card_missing.set_value(f"{missing_cells:,}", "Ô thiếu trong dữ liệu đang nạp", "amber" if missing_cells else "green")
             path_text = Path(self.current_file_path).name if self.current_file_path else "Bộ dữ liệu hiện tại"
             summary_lines = [
@@ -1723,7 +1723,7 @@ class MainWindow(QMainWindow):
                 self,
                 "Cấu hình TX2 không khớp dữ liệu",
                 "File đang có điểm TX2 nhưng bạn chọn công thức không có TX2. "
-                "Hãy kiểm tra cấu trúc đánh giá và chọn đúng profile trước khi tính điểm học phần.",
+                "Hãy kiểm tra cấu trúc đánh giá và chọn đúng cấu hình trước khi tính điểm học phần.",
             )
             return
 
@@ -1796,7 +1796,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Dự đoán hoàn tất", f"Đã tạo kết quả dự đoán cho {len(self.prediction_df):,} bản ghi.")
         except Exception as exc:
             logging.exception("Score prediction failed")
-            self.lbl_prediction_status.setText("Dự đoán thất bại. Kiểm tra feature contract và dữ liệu đầu vào.")
+            self.lbl_prediction_status.setText("Dự đoán thất bại. Kiểm tra cấu trúc đặc trưng và dữ liệu đầu vào.")
             QMessageBox.critical(self, "Không thể dự đoán", self._user_error(exc))
         finally:
             self.btn_predict.setEnabled(True)
