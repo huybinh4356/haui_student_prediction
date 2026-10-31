@@ -1,6 +1,11 @@
+from io import BytesIO
+from pathlib import Path
+from zipfile import ZipFile
+
 import pandas as pd
 import pytest
 
+from haui_student_prediction.data import uci_student_performance as uci_data
 from haui_student_prediction.data.uci_student_performance import (
     CATEGORICAL_FEATURES,
     NUMERICAL_FEATURES,
@@ -155,3 +160,64 @@ def test_uci_model_comparison_rejects_invalid_cv_folds(tmp_path):
 
     with pytest.raises(ValueError, match="cv_folds"):
         compare_uci_models(dataframe, cv_folds=1)
+
+
+
+class _FakeUciResponse(BytesIO):
+    headers = {"Content-Type": "application/zip"}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
+    def geturl(self):
+        return uci_data.UCI_DOWNLOAD_URL
+
+
+def _make_uci_zip():
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("student/student-por.csv", "G1;G2;G3")
+        archive.writestr("student/student-mat.csv", "G1;G2;G3")
+    return buffer.getvalue()
+
+
+def test_uci_download_uses_encoded_url_and_replaces_invalid_cached_archive(
+    tmp_path,
+    monkeypatch,
+):
+    raw_dir = tmp_path / "uci_cache"
+    raw_dir.mkdir()
+    cached_archive = raw_dir / "student+performance.zip"
+    cached_archive.write_bytes(b"not a zip archive")
+    downloaded_bytes = _make_uci_zip()
+
+    def fake_urlopen(request, timeout):
+        assert "%2B" in request.full_url
+        assert timeout == 45
+        return _FakeUciResponse(downloaded_bytes)
+
+    monkeypatch.setattr(uci_data, "urlopen", fake_urlopen)
+
+    archive_path = uci_data._download_archive(raw_dir)
+
+    assert archive_path == cached_archive
+    assert ZipFile(archive_path).namelist() == [
+        "student/student-por.csv",
+        "student/student-mat.csv",
+    ]
+
+
+def test_uci_download_reports_non_zip_server_response(tmp_path, monkeypatch):
+    class HtmlResponse(_FakeUciResponse):
+        headers = {"Content-Type": "text/html; charset=utf-8"}
+
+    def fake_urlopen(request, timeout):
+        return HtmlResponse(b"<html>Access denied</html>")
+
+    monkeypatch.setattr(uci_data, "urlopen", fake_urlopen)
+
+    with pytest.raises(RuntimeError, match="Content-Type 'text/html"):
+        uci_data._download_archive(tmp_path)
