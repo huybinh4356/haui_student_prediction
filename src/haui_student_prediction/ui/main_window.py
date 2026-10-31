@@ -11,9 +11,12 @@ import pandas as pd
 from matplotlib.backends.backend_qt import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtGui import QCloseEvent, QIcon
+from PyQt6.QtGui import QStandardItemModel
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
+    QLayout,
     QFileDialog,
     QFrame,
     QGridLayout,
@@ -64,8 +67,10 @@ class _MetricCard(QFrame):
             self.detail_label.setText(detail)
         if tone is not None:
             self.value_label.setProperty("tone", tone)
-            self.style().unpolish(self.value_label)
-            self.style().polish(self.value_label)
+            style = self.style()
+            if style is not None:
+                style.unpolish(self.value_label)
+                style.polish(self.value_label)
 
 
 class _TrainingWorker(QThread):
@@ -139,9 +144,11 @@ class _TrainingWorker(QThread):
             )
 
             model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
-            dataset_hash = hashlib.sha256(
-                pd.util.hash_pandas_object(data, index=True).values.tobytes()
-            ).hexdigest()
+            hashed_values = pd.util.hash_pandas_object(
+                data,
+                index=True,
+            ).to_numpy(dtype=np.uint64)
+            dataset_hash = hashlib.sha256(hashed_values.tobytes()).hexdigest()
             config = load_config()
             registry = ModelRegistry(
                 str(config.model_registry_path),
@@ -256,6 +263,12 @@ class _UciBenchmarkWorker(QThread):
 
 
 class MainWindow(QMainWindow):
+    card_model: _MetricCard
+    training_progress: QProgressBar
+    uci_progress: QProgressBar
+    table_uci_metrics: QTableWidget
+    settings_nav_button: QPushButton
+
     def __init__(self, dataset_service, prediction_service, chart_service, risk_service, report_service=None):
         super().__init__()
         self.dataset_service = dataset_service
@@ -304,6 +317,11 @@ class MainWindow(QMainWindow):
     def _apply_theme(self) -> None:
         from haui_student_prediction.ui.theme import APP_STYLESHEET
         self.setStyleSheet(APP_STYLESHEET)
+
+    @staticmethod
+    def _standard_icon(icon_name: QStyle.StandardPixmap) -> QIcon:
+        style = QApplication.style()
+        return style.standardIcon(icon_name) if style is not None else QIcon()
 
     def _build_shell(self) -> None:
         root = QWidget()
@@ -361,7 +379,7 @@ class MainWindow(QMainWindow):
             button.setObjectName("NavButton")
             button.setCheckable(True)
             button.setMinimumHeight(42)
-            button.setIcon(QApplication.style().standardIcon(standard_icons[icon_key]))
+            button.setIcon(self._standard_icon(standard_icons[icon_key]))
             button.clicked.connect(lambda checked=False, i=index: self._switch_page(i))
             self.nav_buttons.append(button)
             sidebar_layout.addWidget(button)
@@ -371,7 +389,7 @@ class MainWindow(QMainWindow):
         settings_button.setObjectName("NavButton")
         settings_button.setMinimumHeight(42)
         settings_button.setCheckable(True)
-        settings_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView))
+        settings_button.setIcon(self._standard_icon(QStyle.StandardPixmap.SP_FileDialogInfoView))
         settings_button.clicked.connect(lambda: self._switch_page(8))
         sidebar_layout.addWidget(settings_button)
         self.settings_nav_button = settings_button
@@ -759,7 +777,7 @@ class MainWindow(QMainWindow):
             "primary",
         )
         self.btn_uci_train.setIcon(
-            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+            self._standard_icon(QStyle.StandardPixmap.SP_MediaPlay)
         )
         self.btn_uci_train.setMinimumHeight(40)
         subject_row.addWidget(self.btn_uci_train)
@@ -850,9 +868,9 @@ class MainWindow(QMainWindow):
             ]
         )
         self.table_uci_metrics.setMinimumHeight(250)
-        self.table_uci_metrics.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.ResizeToContents
-        )
+        metrics_header = self.table_uci_metrics.horizontalHeader()
+        if metrics_header is not None:
+            metrics_header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         result_layout.addWidget(self.table_uci_metrics)
         layout.addWidget(result_frame)
 
@@ -1137,9 +1155,13 @@ class MainWindow(QMainWindow):
         table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
-        table.verticalHeader().setVisible(False)
-        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        table.horizontalHeader().setStretchLastSection(True)
+        vertical_header = table.verticalHeader()
+        if vertical_header is not None:
+            vertical_header.setVisible(False)
+        horizontal_header = table.horizontalHeader()
+        if horizontal_header is not None:
+            horizontal_header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+            horizontal_header.setStretchLastSection(True)
         table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         return table
 
@@ -1192,7 +1214,8 @@ class MainWindow(QMainWindow):
             return False
 
     def _update_dashboard(self) -> None:
-        if self.current_df is None:
+        dataframe = self.current_df
+        if dataframe is None:
             self.card_records.set_value("0", "Chưa có bộ dữ liệu", "blue")
             self.card_missing.set_value("—", "Chưa có bộ dữ liệu", "amber")
             self.card_absence.set_value("—", "Ngưỡng cấu hình > 30%", "red")
@@ -1200,7 +1223,7 @@ class MainWindow(QMainWindow):
             self.dashboard_summary.setText("Chưa có dữ liệu được nạp vào phiên làm việc.")
             self._show_dashboard_placeholder("Nhập dữ liệu để hiển thị phân tích.")
         else:
-            df = self.current_df
+            df = dataframe
             missing_cells = int(df.isna().sum().sum())
             if "absence_percentage" in df.columns:
                 absence = pd.to_numeric(df["absence_percentage"], errors="coerce")
@@ -1307,7 +1330,8 @@ class MainWindow(QMainWindow):
                 required_columns,
                 list(DEFAULT_COURSES_WITH_TX2),
             )
-            if not result.is_success or result.data is None:
+            imported_data = result.data
+            if not result.is_success or imported_data is None:
                 error_lines = []
                 if result.missing_columns:
                     error_lines.append("Thiếu cột bắt buộc: " + ", ".join(result.missing_columns))
@@ -1326,17 +1350,18 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Không thể nhập dữ liệu", detail)
                 return
 
-            self.current_df = result.data.copy(deep=True)
+            current_df = imported_data.copy(deep=True)
+            self.current_df = current_df
             self.current_file_path = file_path
-            self._sync_course_profile_from_dataset(self.current_df)
+            self._sync_course_profile_from_dataset(current_df)
             self.prediction_df = None
             self.risk_df = None
             warnings = getattr(result, "warnings", []) or []
             warning_text = f" Có {len(warnings)} cảnh báo cần xem lại." if warnings else ""
             self.lbl_import_status.setText(
-                f"Đã nhập {len(self.current_df):,} bản ghi từ {Path(file_path).name}.{warning_text}"
+                f"Đã nhập {len(current_df):,} bản ghi từ {Path(file_path).name}.{warning_text}"
             )
-            self.lbl_quality_summary.setText(self._build_quality_summary(self.current_df, warnings))
+            self.lbl_quality_summary.setText(self._build_quality_summary(current_df, warnings))
             self.lbl_quality_summary.setStyleSheet(
                 "background:#ECFDF3;color:#027A48;padding:11px;border-radius:8px;" if not warnings
                 else "background:#FFFAEB;color:#B54708;padding:11px;border-radius:8px;"
@@ -1373,16 +1398,17 @@ class MainWindow(QMainWindow):
         return "\n".join(lines)
 
     def _refresh_data_table(self) -> None:
-        if self.current_df is None:
+        dataframe = self.current_df
+        if dataframe is None:
             self.table_import.clear()
             self.table_import.setRowCount(0)
             self.table_import.setColumnCount(0)
             self.lbl_table_count.setText("0 bản ghi")
             return
-        self._populate_table(self.table_import, self.current_df)
-        displayed = min(len(self.current_df), 1000)
+        self._populate_table(self.table_import, dataframe)
+        displayed = min(len(dataframe), 1000)
         self.lbl_table_count.setText(
-            f"Hiển thị {displayed:,}/{len(self.current_df):,} bản ghi để giữ giao diện phản hồi tốt."
+            f"Hiển thị {displayed:,}/{len(dataframe):,} bản ghi để giữ giao diện phản hồi tốt."
         )
 
     def _display_column_name(self, column: Any) -> str:
@@ -1464,7 +1490,9 @@ class MainWindow(QMainWindow):
                 item.setToolTip(text)
                 table.setItem(row_index, column_index, item)
         table.resizeColumnsToContents()
-        table.horizontalHeader().setStretchLastSection(True)
+        header = table.horizontalHeader()
+        if header is not None:
+            header.setStretchLastSection(True)
         table.setSortingEnabled(True)
 
     def _refresh_eda_options(self) -> None:
@@ -1484,7 +1512,11 @@ class MainWindow(QMainWindow):
                 str(column)
                 for column in dataframe.columns
                 if str(column) not in excluded
-                and (pd.api.types.is_object_dtype(dataframe[column]) or pd.api.types.is_bool_dtype(dataframe[column]) or pd.api.types.is_categorical_dtype(dataframe[column]))
+                and (
+                    pd.api.types.is_object_dtype(dataframe[column])
+                    or pd.api.types.is_bool_dtype(dataframe[column])
+                    or isinstance(dataframe[column].dtype, pd.CategoricalDtype)
+                )
                 and dataframe[column].nunique(dropna=True) > 1
             ]
             self.cb_eda_col.addItems(numeric_columns + categorical_columns)
@@ -1704,11 +1736,12 @@ class MainWindow(QMainWindow):
         self._update_model_status()
 
     def _handle_predict(self) -> None:
-        if self.current_df is None or self.current_df.empty:
+        dataframe = self.current_df
+        if dataframe is None or dataframe.empty:
             QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập bộ dữ liệu trước khi dự đoán.")
             return
-        if "tx2_score" in self.current_df.columns:
-            tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
+        if "tx2_score" in dataframe.columns:
+            tx2_values = pd.to_numeric(dataframe["tx2_score"], errors="coerce")
             if tx2_values.notna().any() and tx2_values.isna().any():
                 QMessageBox.warning(
                     self,
@@ -1730,9 +1763,9 @@ class MainWindow(QMainWindow):
             return
 
         tx2_values = (
-            pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
-            if "tx2_score" in self.current_df.columns
-            else pd.Series(np.nan, index=self.current_df.index)
+            pd.to_numeric(dataframe["tx2_score"], errors="coerce")
+            if "tx2_score" in dataframe.columns
+            else pd.Series(np.nan, index=dataframe.index)
         )
         if profile_id == "with_tx2":
             if tx2_values.isna().any():
@@ -1765,14 +1798,14 @@ class MainWindow(QMainWindow):
             self.lbl_prediction_status.setText("Đang dự đoán…")
             QApplication.processEvents()
             results = self.prediction_service.predict_student_results(
-                self.current_df.copy(deep=True),
+                dataframe.copy(deep=True),
                 model_version=ACTIVE_MODEL_VERSION,
                 course_profile_id=profile_id,
             )
 
             risk_rows = []
-            for row_index, row in results.iterrows():
-                student_id = str(row.get("student_id", f"Bản ghi {row_index + 1}"))
+            for row_number, (_, row) in enumerate(results.iterrows(), start=1):
+                student_id = str(row.get("student_id", f"Bản ghi {row_number}"))
                 try:
                     risk_result = self.risk_service.evaluate_student_risk(row)
                     override = bool(risk_result.is_override)
@@ -1839,8 +1872,8 @@ class MainWindow(QMainWindow):
             return
         rows = []
         errors = 0
-        for row_index, row in source.iterrows():
-            student_id = str(row.get("student_id", f"Bản ghi {row_index + 1}"))
+        for row_number, (_, row) in enumerate(source.iterrows(), start=1):
+            student_id = str(row.get("student_id", f"Bản ghi {row_number}"))
             try:
                 result = self.risk_service.evaluate_student_risk(row)
                 is_override = bool(result.is_override)
@@ -1953,9 +1986,10 @@ class MainWindow(QMainWindow):
                 "risk": "Kết quả nguy cơ học vụ",
             }.get(key, str(key)))
             model = self.cb_report_type.model()
-            item = model.item(index) if hasattr(model, "item") else None
-            if item is not None:
-                item.setEnabled(available)
+            if isinstance(model, QStandardItemModel):
+                item = model.item(index)
+                if item is not None:
+                    item.setEnabled(available)
         if current is not None:
             self.cb_report_type.setCurrentIndex(max(0, self.cb_report_type.findData(current)))
 
@@ -2042,9 +2076,11 @@ class MainWindow(QMainWindow):
             return "N/A"
         return f"{number:.4f}" if np.isfinite(number) else "N/A"
 
-    def _clear_layout(self, layout: QVBoxLayout | QHBoxLayout) -> None:
+    def _clear_layout(self, layout: QLayout) -> None:
         while layout.count():
             item = layout.takeAt(0)
+            if item is None:
+                continue
             widget = item.widget()
             child_layout = item.layout()
             if widget is not None:
@@ -2057,14 +2093,17 @@ class MainWindow(QMainWindow):
         message = str(exc).strip()
         return message if message else exc.__class__.__name__
 
-    def closeEvent(self, event) -> None:
-        worker = self._training_worker
-        if worker is not None and worker.isRunning():
+    def closeEvent(self, a0: QCloseEvent) -> None:
+        active_workers = (
+            self._training_worker,
+            self._uci_training_worker,
+        )
+        if any(worker is not None and worker.isRunning() for worker in active_workers):
             QMessageBox.warning(
                 self,
                 "Đang huấn luyện",
-                "Hãy đợi tác vụ huấn luyện kết thúc trước khi đóng ứng dụng.",
+                "Hãy đợi các tác vụ huấn luyện kết thúc trước khi đóng ứng dụng.",
             )
-            event.ignore()
+            a0.ignore()
             return
-        super().closeEvent(event)
+        super().closeEvent(a0)
