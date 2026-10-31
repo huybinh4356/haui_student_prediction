@@ -89,7 +89,11 @@ class DataValidator:
                             f"{FIELD_LABELS.get(column, column)} phải nằm trong "
                             f"khoảng {minimum:g}–{maximum:g}."
                         ),
-                        "kind": "numeric_out_of_range",
+                        "kind": (
+                            "percentage_out_of_range"
+                            if column in {"absence_percentage", "lms_learning_percentage"}
+                            else "score_out_of_range"
+                        ),
                     }
                 )
         return errors
