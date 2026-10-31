@@ -29,10 +29,10 @@
 
 | Field | Type | Scale | ML Use |
 |-------|------|-------|--------|
-| tx1_score | float | 0-10 (to confirm) | Feature |
-| tx2_score | float/null | 0-10 (to confirm) | Feature if has_tx2=True |
-| midterm_score | float | 0-10 (to confirm) | Feature |
-| target_final_exam_score | float | 0-10 (confirm from source) | Historical training target only; never in prediction input |
+| tx1_score | float | 0-10 | Feature; values outside the configured range are rejected |
+| tx2_score | float/null | 0-10 | Feature if has_tx2=True; values outside the configured range are rejected |
+| midterm_score | float | 0-10 | Feature; values outside the configured range are rejected |
+| target_final_exam_score | float | 0-10 | Historical training target only; never in prediction input; validated before training |
 
 ## Attendance & LMS
 
@@ -45,9 +45,9 @@
 
 | Field | Type | Notes |
 |-------|------|-------|
-| interaction_score | float/ordinal | Higher = better interaction (to confirm) |
-| stress_score | float/ordinal | Higher = more stress (to confirm) |
-| motivation_score | float/ordinal | Higher = more motivation (to confirm) |
+| interaction_score | float/ordinal | 1-5; higher = better interaction |
+| stress_score | float/ordinal | 1-5; higher = more stress |
+| motivation_score | float/ordinal | 1-5; higher = more motivation |
 | works_part_time | boolean | Direction of effect unconfirmed; neutral mapping |
 | survey_timestamp | datetime | Must precede prediction snapshot |
 
@@ -58,6 +58,15 @@
 | snapshot_date | datetime | Prediction cutoff; anti-leakage |
 | source_file | string | Provenance |
 | dataset_version | string | Reproducibility |
+
+## Validation rules and risk inputs
+
+- Percentages `absence_percentage` and `lms_learning_percentage` must be within 0-100.
+- Academic scores `tx1_score`, `tx2_score`, `midterm_score`, and the historical target `target_final_exam_score` must be within 0-10.
+- Survey fields `interaction_score`, `stress_score`, and `motivation_score` must be within 1-5.
+- Risk evaluation requires absence percentage, LMS percentage, interaction, stress, motivation, and a calculated `predicted_course_score` within 0-10.
+- Missing risk inputs do not block a valid grade prediction. The affected record is marked as not evaluated for risk and lists the missing or invalid fields. The system never fills missing risk values with invented values.
+- `works_part_time` remains optional in the risk engine and currently uses a neutral contribution until its effect is supported by evidence.
 
 ## UCI benchmark-only fields
 
