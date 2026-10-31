@@ -22,19 +22,14 @@ class IngestionResult:
     )  # non-blocking notes
 
 class IngestionService:
-    """Policy summary (requirement #5 & #6):
+    """Validate imported student data without inventing missing values.
 
-    * DUPLICATES: a duplicate on (student_id, course_id, semester) is a blocking
-      error -> is_success becomes False. Data is NOT silently dropped and is NOT
-      returned; the caller (UI) must surface duplicate_indices to the user so
-      they can fix the source file. We never auto-delete rows.
-    * MISSING VALUES: empty cells are legitimate missing values (NaN) and do not
-      block success. Uncoercible numeric / boolean tokens ARE blocking errors.
-    * PERCENTAGES out of [0,100]: blocking error.
-    * SCORE SCALE: no hard threshold (no explicit config); flagged as a warning
-      note for operator confirmation (requirement #4).
-    * is_success is True only when: required columns present AND no percentage
-      errors AND no conversion errors AND no duplicates.
+    * Duplicate keys and missing required prediction fields block import.
+    * Unparseable numeric/boolean values block import; blank values remain missing.
+    * Percentages must be 0-100, academic grades 0-10, and survey ratings 1-5.
+    * Missing risk-only fields are non-blocking warnings. Grade prediction may
+      continue, but each affected student's risk result is marked not evaluated.
+    * No missing value is replaced with zero, an average, or a fabricated score.
     """
     def __init__(self, cleaner: DataCleaner, validator: DataValidator):
         self.cleaner = cleaner
