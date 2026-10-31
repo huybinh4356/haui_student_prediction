@@ -8,6 +8,7 @@ from haui_student_prediction.data.column_mapping import (
     get_default_column_mapping,
     is_training_target_column,
 )
+from haui_student_prediction.data.validator import DataValidator
 
 
 TARGET_COLUMN = "target_final_exam_score"
@@ -73,6 +74,20 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
     target_values = target.to_numpy(dtype=float, na_value=np.nan, copy=True)
     target_values[~np.isfinite(target_values)] = np.nan
     feature_data[TARGET_COLUMN] = target_values
+
+    range_errors = DataValidator().validate_numeric_ranges(feature_data)
+    if range_errors:
+        details = "; ".join(
+            f"dòng {error['row'] + 2}, cột {error['column']}: {error['error']}"
+            for error in range_errors[:10]
+        )
+        remainder = len(range_errors) - 10
+        suffix = f"; và {remainder} lỗi khác" if remainder > 0 else ""
+        raise ValueError(
+            "Dữ liệu lịch sử có giá trị ngoài thang cho phép: "
+            f"{details}{suffix}"
+        )
+
     valid = np.isfinite(target_values)
     if int(valid.sum()) < 10:
         raise ValueError(
