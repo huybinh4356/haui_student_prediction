@@ -487,9 +487,9 @@ class MainWindow(QMainWindow):
         cards = QGridLayout()
         cards.setSpacing(12)
         self.card_records = _MetricCard("BẢN GHI ĐÃ NẠP", "—", "Chưa có bộ dữ liệu", "blue")
-        self.card_missing = _MetricCard("Ô DỮ LIỆU THIẾU", "—", "Chưa có dataset", "amber")
+        self.card_missing = _MetricCard("Ô DỮ LIỆU THIẾU", "—", "Chưa có bộ dữ liệu", "amber")
         self.card_absence = _MetricCard("VƯỢT NGƯỠNG NGHỈ HỌC", "—", "Ngưỡng cấu hình > 30%", "red")
-        self.card_model = _MetricCard("MÔ HÌNH DỰ ĐOÁN", "Chưa sẵn sàng", "Cần model đã huấn luyện", "violet")
+        self.card_model = _MetricCard("MÔ HÌNH DỰ ĐOÁN", "Chưa sẵn sàng", "Cần mô hình đã huấn luyện", "violet")
         cards.addWidget(self.card_records, 0, 0)
         cards.addWidget(self.card_missing, 0, 1)
         cards.addWidget(self.card_absence, 0, 2)
@@ -523,7 +523,7 @@ class MainWindow(QMainWindow):
 
         notice_frame, notice_layout = self._surface("Lưu ý vận hành")
         notice = QLabel(
-            "Kết quả dự đoán chỉ được cung cấp khi có model hợp lệ và dữ liệu đầu vào đáp ứng feature contract. "
+            "Chỉ dự đoán khi có mô hình hợp lệ và dữ liệu đáp ứng bộ đặc trưng đầu vào. "
             "Trạng thái vượt ngưỡng nghỉ học được hiển thị riêng với điểm nguy cơ tổng hợp."
         )
         notice.setWordWrap(True)
@@ -690,7 +690,7 @@ class MainWindow(QMainWindow):
     def _build_models_page(self, body: QWidget, layout: QVBoxLayout) -> None:
         state_frame, state_layout = self._surface("Trạng thái mô hình")
         top = QHBoxLayout()
-        self.lbl_model_page_status = QLabel("Đang kiểm tra registry…")
+        self.lbl_model_page_status = QLabel("Đang kiểm tra kho mô hình…")
         self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B45309;")
         top.addWidget(self.lbl_model_page_status, 1)
         self.btn_model_refresh = QPushButton("Làm mới trạng thái")
@@ -974,6 +974,11 @@ class MainWindow(QMainWindow):
             )
         except Exception as exc:
             logging.exception("Could not load saved UCI benchmark results")
+            self.table_uci_metrics.setRowCount(0)
+            self.lbl_uci_result_summary.setText("Chưa có kết quả thực nghiệm hợp lệ để hiển thị.")
+            self.card_uci_best_model.set_value("—", "Chưa có kết quả hợp lệ", "green")
+            self.card_uci_cv_mae.set_value("—", "Chưa có kết quả hợp lệ", "blue")
+            self.card_uci_test_mae.set_value("—", "Chưa có kết quả hợp lệ", "violet")
             self.lbl_uci_status.setText(
                 f"Không thể đọc kết quả đã lưu: {self._user_error(exc)}"
             )
@@ -1052,7 +1057,7 @@ class MainWindow(QMainWindow):
         frame_layout.addWidget(intro)
         row = QHBoxLayout()
         self.cb_report_type = QComboBox()
-        self.cb_report_type.addItem("Bộ dữ liệu đã nhập", "dataset")
+        self.cb_report_type.addItem("Bộ dữ liệu đã nhập", "bộ dữ liệu")
         self.cb_report_type.addItem("Kết quả dự đoán điểm", "prediction")
         self.cb_report_type.addItem("Kết quả nguy cơ học vụ", "risk")
         row.addWidget(self.cb_report_type, 1)
@@ -1163,8 +1168,8 @@ class MainWindow(QMainWindow):
 
     def _update_dashboard(self) -> None:
         if self.current_df is None:
-            self.card_records.set_value("0", "Chưa có dataset", "blue")
-            self.card_missing.set_value("—", "Chưa có dataset", "amber")
+            self.card_records.set_value("0", "Chưa có bộ dữ liệu", "blue")
+            self.card_missing.set_value("—", "Chưa có bộ dữ liệu", "amber")
             self.card_absence.set_value("—", "Ngưỡng cấu hình > 30%", "red")
             self.card_risk_override_value = None
             self.dashboard_summary.setText("Chưa có dữ liệu được nạp vào phiên làm việc.")
@@ -1213,7 +1218,7 @@ class MainWindow(QMainWindow):
 
     def _render_dashboard_chart(self) -> None:
         if self.current_df is None or "absence_percentage" not in self.current_df.columns:
-            self._show_dashboard_placeholder("Dataset chưa có cột tỷ lệ nghỉ học.")
+            self._show_dashboard_placeholder("Bộ dữ liệu chưa có cột tỷ lệ nghỉ học.")
             return
         try:
             figure = self.chart_service.dist_plots.plot_histogram(self.current_df, "absence_percentage")
@@ -1652,7 +1657,7 @@ class MainWindow(QMainWindow):
             f"MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
             f"Số đặc trưng: {result['feature_count']}\n"
             f"Mã nhận diện bộ dữ liệu: {result['dataset_hash']}\n"
-            f"Features: {', '.join(result['features'])}"
+            f"Các đặc trưng: {', '.join(result['features'])}"
         )
         self._update_all_status()
         self._refresh_model_page_info()
@@ -1845,7 +1850,7 @@ class MainWindow(QMainWindow):
         high_categories = {"Cao", "Rất cao"}
         high_count = int(self.risk_df.loc[valid, "risk_category"].isin(high_categories).sum()) if valid.any() else 0
         self.card_risk_evaluated.set_value(f"{int(valid.sum()):,}", f"Tổng bản ghi: {len(self.risk_df):,}", "green")
-        self.card_risk_override.set_value(f"{overrides:,}", "Trạng thái HOC_LAI", "red")
+        self.card_risk_override.set_value(f"{overrides:,}", "Trạng thái học lại", "red")
         self.card_risk_high.set_value(f"{high_count:,}", "Nguy cơ cao hoặc rất cao", "amber")
         self.lbl_risk_status.setText(
             f"Đã đánh giá {int(valid.sum()):,}/{len(self.risk_df):,} bản ghi."
@@ -1913,12 +1918,12 @@ class MainWindow(QMainWindow):
         for index in range(self.cb_report_type.count() - 1, -1, -1):
             key = self.cb_report_type.itemData(index)
             available = (
-                (key == "dataset" and self.current_df is not None)
+                (key == "bộ dữ liệu" and self.current_df is not None)
                 or (key == "prediction" and self.prediction_df is not None)
                 or (key == "risk" and self.risk_df is not None)
             )
             self.cb_report_type.setItemText(index, {
-                "dataset": "Bộ dữ liệu đã nhập",
+                "bộ dữ liệu": "Bộ dữ liệu đã nhập",
                 "prediction": "Kết quả dự đoán điểm",
                 "risk": "Kết quả nguy cơ học vụ",
             }.get(key, str(key)))
@@ -1931,7 +1936,7 @@ class MainWindow(QMainWindow):
 
     def _get_report_dataframe(self, report_type: str) -> pd.DataFrame:
         mapping = {
-            "dataset": self.current_df,
+            "bộ dữ liệu": self.current_df,
             "prediction": self.prediction_df,
             "risk": self.risk_df,
         }
@@ -1951,7 +1956,7 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Chưa có dữ liệu để xuất", self._user_error(exc))
             return
         default_name = {
-            "dataset": "haui_dataset_cleaned.xlsx",
+            "bộ dữ liệu": "haui_dataset_cleaned.xlsx",
             "prediction": "haui_score_predictions.xlsx",
             "risk": "haui_academic_risk.xlsx",
         }.get(report_type, "haui_report.xlsx")
