@@ -175,11 +175,18 @@ class _FakeUciResponse(BytesIO):
         return uci_data.UCI_DOWNLOAD_URL
 
 
-def _make_uci_zip():
+def _make_inner_student_zip():
     buffer = BytesIO()
     with ZipFile(buffer, "w") as archive:
         archive.writestr("student/student-por.csv", "G1;G2;G3")
         archive.writestr("student/student-mat.csv", "G1;G2;G3")
+    return buffer.getvalue()
+
+
+def _make_uci_zip():
+    buffer = BytesIO()
+    with ZipFile(buffer, "w") as archive:
+        archive.writestr("student.zip", _make_inner_student_zip())
     return buffer.getvalue()
 
 
@@ -203,10 +210,15 @@ def test_uci_download_uses_encoded_url_and_replaces_invalid_cached_archive(
     archive_path = uci_data._download_archive(raw_dir)
 
     assert archive_path == cached_archive
-    assert ZipFile(archive_path).namelist() == [
-        "student/student-por.csv",
-        "student/student-mat.csv",
-    ]
+    with ZipFile(archive_path) as outer_archive:
+        assert outer_archive.namelist() == ["student.zip"]
+        nested_bytes = outer_archive.read("student.zip")
+    with ZipFile(BytesIO(nested_bytes)) as inner_archive:
+        assert inner_archive.namelist() == [
+            "student/student-por.csv",
+            "student/student-mat.csv",
+        ]
+    assert uci_data._archive_has_required_files(archive_path)
 
 
 def test_uci_download_reports_non_zip_server_response(tmp_path, monkeypatch):
@@ -224,7 +236,7 @@ def test_uci_download_reports_non_zip_server_response(tmp_path, monkeypatch):
 
 def test_uci_download_uses_manually_downloaded_student_zip(tmp_path, monkeypatch):
     manual_archive = tmp_path / "student.zip"
-    manual_archive.write_bytes(_make_uci_zip())
+    manual_archive.write_bytes(_make_inner_student_zip())
 
     def unexpected_download(request, timeout):
         raise AssertionError("The manual UCI archive should be used without downloading.")
@@ -235,3 +247,12 @@ def test_uci_download_uses_manually_downloaded_student_zip(tmp_path, monkeypatch
 
     assert archive_path == manual_archive
     assert uci_data._archive_has_required_files(archive_path)
+
+
+def test_uci_reader_extracts_csv_from_nested_student_zip(tmp_path):
+    archive_path = tmp_path / "student+performance.zip"
+    archive_path.write_bytes(_make_uci_zip())
+
+    result = uci_data._read_csv_from_archive(archive_path, "student-por.csv")
+
+    assert result.columns.tolist() == ["G1", "G2", "G3"]
