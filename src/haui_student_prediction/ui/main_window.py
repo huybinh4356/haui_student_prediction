@@ -173,6 +173,88 @@ class _TrainingWorker(QThread):
             self.failed.emit(str(exc))
 
 
+
+
+class _UciBenchmarkWorker(QThread):
+    succeeded = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, subject: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.subject = subject
+
+    def run(self) -> None:
+        try:
+            from haui_student_prediction.data.uci_student_performance import (
+                UCI_DATASET_DOI,
+                UCI_DATASET_LICENSE,
+                UCI_DATASET_NAME,
+                load_uci_student_performance,
+            )
+            from haui_student_prediction.ml.uci_model_comparison import compare_uci_models
+
+            project_root = Path(__file__).resolve().parents[3]
+            raw_dir = project_root / "data" / "raw" / "uci_student_performance"
+            output_dir = project_root / "outputs" / "uci_model_comparison"
+
+            dataframe = load_uci_student_performance(
+                subject=self.subject,
+                raw_dir=raw_dir,
+            )
+            metrics, predictions = compare_uci_models(
+                dataframe,
+                test_size=0.2,
+                random_state=42,
+                cv_folds=5,
+            )
+
+            output_dir.mkdir(parents=True, exist_ok=True)
+            metrics_path = output_dir / f"uci_{self.subject}_model_metrics.csv"
+            predictions_path = output_dir / f"uci_{self.subject}_test_predictions.csv"
+            metadata_path = output_dir / f"uci_{self.subject}_training_metadata.txt"
+
+            metrics.to_csv(metrics_path, index=False, encoding="utf-8-sig")
+            predictions.to_csv(predictions_path, index=False, encoding="utf-8-sig")
+            metadata_path.write_text(
+                "\\n".join(
+                    [
+                        f"dataset={UCI_DATASET_NAME}",
+                        "dataset_id=320",
+                        f"subject={self.subject}",
+                        f"dataset_rows={len(dataframe)}",
+                        "target=G3 final course grade, normalized from 0-20 to 0-10",
+                        "test_size=0.2",
+                        "cv_folds=5",
+                        "validation_strategy=k-fold cross-validation inside the training partition",
+                        "model_selection_metric=mean cross-validation MAE",
+                        "test_usage=final holdout evaluation only",
+                        "random_state=42",
+                        f"license={UCI_DATASET_LICENSE}",
+                        f"doi={UCI_DATASET_DOI}",
+                        "production_registry=not_updated",
+                        "note=G3 is a final course grade, not a separately identified final-exam score.",
+                    ]
+                ),
+                encoding="utf-8",
+            )
+
+            self.succeeded.emit(
+                {
+                    "metrics": metrics,
+                    "predictions": predictions,
+                    "subject": self.subject,
+                    "dataset_rows": len(dataframe),
+                    "train_rows": int(metrics.iloc[0]["train_rows"]),
+                    "test_rows": int(metrics.iloc[0]["test_rows"]),
+                    "metrics_path": str(metrics_path),
+                    "predictions_path": str(predictions_path),
+                }
+            )
+        except Exception as exc:
+            logging.exception("UCI benchmark training failed")
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     def __init__(self, dataset_service, prediction_service, chart_service, risk_service, report_service=None):
         super().__init__()
@@ -187,13 +269,15 @@ class MainWindow(QMainWindow):
         self.current_file_path: str | None = None
         self.training_file_path: str | None = None
         self._training_worker: _TrainingWorker | None = None
+        self._uci_training_worker: _UciBenchmarkWorker | None = None
         self._page_titles = [
             "Tổng quan",
             "Dữ liệu sinh viên",
             "Phân tích dữ liệu",
             "Dự đoán điểm",
             "Dự đoán nguy cơ học vụ",
-            "Mô hình ML",
+            "Mô hình dự đoán",
+            "Huấn luyện & so sánh",
             "Báo cáo",
             "Cấu hình",
         ]
@@ -203,11 +287,12 @@ class MainWindow(QMainWindow):
             "Khám phá phân bố, xu hướng và mối liên hệ trong dữ liệu.",
             "Ước lượng điểm thi cuối kỳ và điểm học phần dự kiến.",
             "Đánh giá nguy cơ dựa trên dữ liệu học tập hiện có.",
-            "Theo dõi, huấn luyện và xác minh mô hình dự đoán.",
+            "Quản lý mô hình dự đoán dành riêng cho dữ liệu HaUI.",
+            "Thực nghiệm XGBoost, Random Forest và CatBoost với bộ dữ liệu UCI.",
             "Xuất dữ liệu và kết quả phân tích đang có.",
             "Xem cấu hình môi trường và đường dẫn hiện hành.",
         ]
-        self.setWindowTitle("HaUI Student Analytics")
+        self.setWindowTitle("Phân tích học tập HaUI")
         self.setMinimumSize(1100, 720)
         self.resize(1440, 900)
         self._apply_theme()
@@ -238,10 +323,10 @@ class MainWindow(QMainWindow):
         brand_layout = QVBoxLayout(brand)
         brand_layout.setContentsMargins(10, 2, 10, 22)
         brand_layout.setSpacing(5)
-        brand_title = QLabel("HaUI Student Analytics")
+        brand_title = QLabel("Phân tích học tập HaUI")
         brand_title.setObjectName("BrandTitle")
         brand_title.setWordWrap(True)
-        brand_caption = QLabel("ACADEMIC INTELLIGENCE")
+        brand_caption = QLabel("HỆ THỐNG PHÂN TÍCH HỌC TẬP")
         brand_caption.setObjectName("BrandCaption")
         brand_layout.addWidget(brand_title)
         brand_layout.addWidget(brand_caption)
@@ -258,7 +343,8 @@ class MainWindow(QMainWindow):
             ("Phân tích dữ liệu", "SP_FileDialogContentsView"),
             ("Dự đoán điểm", "SP_MediaPlay"),
             ("Dự đoán nguy cơ học vụ", "SP_MessageBoxWarning"),
-            ("Mô hình ML", "SP_BrowserReload"),
+            ("Mô hình dự đoán", "SP_BrowserReload"),
+            ("Huấn luyện & so sánh", "SP_BrowserReload"),
             ("Báo cáo", "SP_FileDialogListView"),
         ]
         standard_icons = {
@@ -286,11 +372,11 @@ class MainWindow(QMainWindow):
         settings_button.setMinimumHeight(42)
         settings_button.setCheckable(True)
         settings_button.setIcon(QApplication.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogInfoView))
-        settings_button.clicked.connect(lambda: self._switch_page(7))
+        settings_button.clicked.connect(lambda: self._switch_page(8))
         sidebar_layout.addWidget(settings_button)
         self.settings_nav_button = settings_button
 
-        sidebar_footer = QLabel("HaUI · Student Performance")
+        sidebar_footer = QLabel("HaUI · Phân tích kết quả học tập")
         sidebar_footer.setObjectName("BrandCaption")
         sidebar_footer.setWordWrap(True)
         sidebar_footer.setContentsMargins(10, 12, 10, 0)
@@ -314,7 +400,7 @@ class MainWindow(QMainWindow):
         top_layout.addStretch(1)
         self.lbl_dataset_badge = QLabel("Chưa có dữ liệu")
         self.lbl_dataset_badge.setStyleSheet("background:#F2F4F7;color:#475467;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
-        self.lbl_model_badge = QLabel("Model chưa sẵn sàng")
+        self.lbl_model_badge = QLabel("Mô hình chưa sẵn sàng")
         self.lbl_model_badge.setStyleSheet("background:#FEF3F2;color:#B42318;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         top_layout.addWidget(self.lbl_dataset_badge)
         top_layout.addWidget(self.lbl_model_badge)
@@ -380,9 +466,10 @@ class MainWindow(QMainWindow):
             ("Phân tích dữ liệu", self._page_subtitles[2], self._build_eda_page),
             ("Dự đoán điểm thi cuối kỳ", self._page_subtitles[3], self._build_prediction_page),
             ("Dự đoán nguy cơ học vụ", self._page_subtitles[4], self._build_risk_page),
-            ("Mô hình Machine Learning", self._page_subtitles[5], self._build_models_page),
-            ("Báo cáo và xuất dữ liệu", self._page_subtitles[6], self._build_reports_page),
-            ("Cấu hình ứng dụng", self._page_subtitles[7], self._build_settings_page),
+            ("Mô hình dự đoán HaUI", self._page_subtitles[5], self._build_models_page),
+            ("Huấn luyện và so sánh mô hình", self._page_subtitles[6], self._build_uci_benchmark_page),
+            ("Báo cáo và xuất dữ liệu", self._page_subtitles[7], self._build_reports_page),
+            ("Cấu hình ứng dụng", self._page_subtitles[8], self._build_settings_page),
         ]
         for title, subtitle, builder in page_definitions:
             scroll, body, layout = self._create_page(title, subtitle)
@@ -646,6 +733,317 @@ class MainWindow(QMainWindow):
         metrics_layout.addWidget(self.lbl_model_metrics)
         layout.addWidget(metrics_frame)
 
+    def _build_uci_benchmark_page(self, body: QWidget, layout: QVBoxLayout) -> None:
+        intro_frame, intro_layout = self._surface("🧪 Thực nghiệm trên bộ dữ liệu UCI")
+        intro = QLabel(
+            "Huấn luyện và so sánh ba thuật toán trên dữ liệu Student Performance của UCI. "
+            "Kết quả tại đây phục vụ nghiên cứu thuật toán, không thay thế mô hình dự đoán chính thức của HaUI."
+        )
+        intro.setWordWrap(True)
+        intro.setObjectName("Muted")
+        intro_layout.addWidget(intro)
+
+        subject_row = QHBoxLayout()
+        subject_label = QLabel("Bộ dữ liệu:")
+        self.cb_uci_subject = QComboBox()
+        self.cb_uci_subject.addItem("Tiếng Bồ Đào Nha · 649 bản ghi", "por")
+        self.cb_uci_subject.addItem("Toán học · 395 bản ghi", "mat")
+        self.cb_uci_subject.setMinimumWidth(280)
+        self.cb_uci_subject.currentIndexChanged.connect(self._handle_uci_subject_changed)
+        subject_row.addWidget(subject_label)
+        subject_row.addWidget(self.cb_uci_subject)
+        subject_row.addStretch(1)
+        self.btn_uci_train = self._primary_button(
+            "Chạy huấn luyện và đánh giá",
+            self._handle_uci_training,
+            "primary",
+        )
+        self.btn_uci_train.setIcon(
+            QApplication.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay)
+        )
+        self.btn_uci_train.setMinimumHeight(40)
+        subject_row.addWidget(self.btn_uci_train)
+        intro_layout.addLayout(subject_row)
+
+        self.uci_progress = QProgressBar()
+        self.uci_progress.setRange(0, 0)
+        self.uci_progress.setVisible(False)
+        intro_layout.addWidget(self.uci_progress)
+        self.lbl_uci_status = QLabel(
+            "Chưa chạy thực nghiệm. Chọn môn học rồi bấm “Chạy huấn luyện và đánh giá”."
+        )
+        self.lbl_uci_status.setWordWrap(True)
+        self.lbl_uci_status.setObjectName("Muted")
+        intro_layout.addWidget(self.lbl_uci_status)
+        layout.addWidget(intro_frame)
+
+        split_frame, split_layout = self._surface("Cấu hình chia dữ liệu")
+        split_cards = QGridLayout()
+        split_cards.setSpacing(12)
+        self.card_uci_train_split = _MetricCard("TẬP HUẤN LUYỆN", "80%", "519 bản ghi dự kiến", "blue")
+        self.card_uci_test_split = _MetricCard("TẬP KIỂM THỬ", "20%", "130 bản ghi dự kiến", "amber")
+        self.card_uci_cv_split = _MetricCard("KIỂM ĐỊNH CHÉO", "5 phần", "Mỗi lượt giữ lại 1 phần để xác thực", "violet")
+        split_cards.addWidget(self.card_uci_train_split, 0, 0)
+        split_cards.addWidget(self.card_uci_test_split, 0, 1)
+        split_cards.addWidget(self.card_uci_cv_split, 0, 2)
+        for column in range(3):
+            split_cards.setColumnStretch(column, 1)
+        split_layout.addLayout(split_cards)
+        split_note = QLabel(
+            "Tập kiểm thử được giữ riêng để đánh giá cuối cùng. Việc chọn mô hình dựa trên MAE trung bình của 5 lượt kiểm định chéo trong tập huấn luyện."
+        )
+        split_note.setWordWrap(True)
+        split_note.setObjectName("Muted")
+        split_layout.addWidget(split_note)
+        layout.addWidget(split_frame)
+
+        result_frame, result_layout = self._surface("Kết quả thực nghiệm")
+        result_cards = QGridLayout()
+        result_cards.setSpacing(12)
+        self.card_uci_best_model = _MetricCard("MÔ HÌNH TỐT NHẤT", "—", "Xếp hạng theo MAE kiểm định chéo", "green")
+        self.card_uci_cv_mae = _MetricCard("MAE KIỂM ĐỊNH CHÉO", "—", "Giá trị trung bình ± độ lệch chuẩn", "blue")
+        self.card_uci_test_mae = _MetricCard("MAE KIỂM THỬ", "—", "Đánh giá trên dữ liệu chưa dùng để huấn luyện", "violet")
+        result_cards.addWidget(self.card_uci_best_model, 0, 0)
+        result_cards.addWidget(self.card_uci_cv_mae, 0, 1)
+        result_cards.addWidget(self.card_uci_test_mae, 0, 2)
+        for column in range(3):
+            result_cards.setColumnStretch(column, 1)
+        result_layout.addLayout(result_cards)
+
+        self.lbl_uci_result_summary = QLabel("Chưa có kết quả thực nghiệm.")
+        self.lbl_uci_result_summary.setWordWrap(True)
+        self.lbl_uci_result_summary.setObjectName("Muted")
+        result_layout.addWidget(self.lbl_uci_result_summary)
+
+        self.table_uci_metrics = self._create_table()
+        self.table_uci_metrics.setColumnCount(8)
+        self.table_uci_metrics.setHorizontalHeaderLabels(
+            [
+                "Thuật toán",
+                "MAE kiểm định chéo (TB ± ĐLC)",
+                "RMSE kiểm định chéo",
+                "R² kiểm định chéo",
+                "MAE kiểm thử",
+                "RMSE kiểm thử",
+                "R² kiểm thử",
+                "Thời gian (giây)",
+            ]
+        )
+        self.table_uci_metrics.setMinimumHeight(250)
+        self.table_uci_metrics.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.ResizeToContents
+        )
+        result_layout.addWidget(self.table_uci_metrics)
+        layout.addWidget(result_frame)
+
+        output_frame, output_layout = self._surface("Lưu trữ kết quả")
+        output_note = QLabel(
+            "Các chỉ số tổng hợp, dự đoán trên tập kiểm thử và thông tin lần chạy được lưu tại "
+            "outputs/uci_model_comparison/. Dữ liệu UCI và kết quả thực nghiệm không ghi đè kho mô hình HaUI."
+        )
+        output_note.setWordWrap(True)
+        output_note.setObjectName("Muted")
+        output_layout.addWidget(output_note)
+        layout.addWidget(output_frame)
+        layout.addStretch(1)
+        self._update_uci_split_preview()
+
+    def _update_uci_split_preview(self) -> None:
+        if not hasattr(self, "cb_uci_subject"):
+            return
+        subject = self.cb_uci_subject.currentData() or "por"
+        dataset_rows = 649 if subject == "por" else 395
+        test_rows = int(np.ceil(dataset_rows * 0.2))
+        train_rows = dataset_rows - test_rows
+        validation_rows = int(np.ceil(train_rows / 5))
+        self.card_uci_train_split.set_value(
+            "80%",
+            f"Khoảng {train_rows:,}/{dataset_rows:,} bản ghi",
+        )
+        self.card_uci_test_split.set_value(
+            "20%",
+            f"{test_rows:,}/{dataset_rows:,} bản ghi",
+        )
+        self.card_uci_cv_split.set_value(
+            "5 phần",
+            f"Mỗi lượt xác thực khoảng {validation_rows:,} bản ghi",
+        )
+
+    def _handle_uci_subject_changed(self) -> None:
+        self._update_uci_split_preview()
+        self._refresh_uci_benchmark_results()
+
+    def _handle_uci_training(self) -> None:
+        if self._uci_training_worker is not None and self._uci_training_worker.isRunning():
+            return
+        subject = self.cb_uci_subject.currentData() or "por"
+        subject_label = "Tiếng Bồ Đào Nha" if subject == "por" else "Toán học"
+        self.btn_uci_train.setEnabled(False)
+        self.cb_uci_subject.setEnabled(False)
+        self.uci_progress.setVisible(True)
+        self.lbl_uci_status.setText(
+            f"Đang tải dữ liệu {subject_label} và huấn luyện ba mô hình. "
+            "Quá trình có thể mất một lúc do mỗi mô hình được chạy qua 5 lượt kiểm định chéo."
+        )
+        self._uci_training_worker = _UciBenchmarkWorker(subject, self)
+        self._uci_training_worker.succeeded.connect(self._on_uci_training_succeeded)
+        self._uci_training_worker.failed.connect(self._on_uci_training_failed)
+        self._uci_training_worker.finished.connect(self._on_uci_training_finished)
+        self._uci_training_worker.start()
+
+    def _on_uci_training_succeeded(self, result: dict[str, Any]) -> None:
+        metrics = result["metrics"]
+        self._render_uci_benchmark_metrics(
+            metrics,
+            dataset_rows=int(result["dataset_rows"]),
+            train_rows=int(result["train_rows"]),
+            test_rows=int(result["test_rows"]),
+        )
+        subject_label = "Tiếng Bồ Đào Nha" if result["subject"] == "por" else "Toán học"
+        self.lbl_uci_status.setText(
+            f"Đã hoàn tất thực nghiệm trên bộ dữ liệu {subject_label}. "
+            f"Kết quả được lưu tại: {result['metrics_path']}"
+        )
+
+    def _on_uci_training_failed(self, error: str) -> None:
+        self.lbl_uci_status.setText(f"Huấn luyện chưa hoàn tất: {self._user_error(error)}")
+        QMessageBox.warning(
+            self,
+            "Không thể hoàn thành huấn luyện",
+            self._user_error(error),
+        )
+
+    def _on_uci_training_finished(self) -> None:
+        self.uci_progress.setVisible(False)
+        self.btn_uci_train.setEnabled(True)
+        self.cb_uci_subject.setEnabled(True)
+        self._uci_training_worker = None
+
+    def _refresh_uci_benchmark_results(self) -> None:
+        if not hasattr(self, "cb_uci_subject"):
+            return
+        if self._uci_training_worker is not None and self._uci_training_worker.isRunning():
+            return
+        subject = self.cb_uci_subject.currentData() or "por"
+        project_root = Path(__file__).resolve().parents[3]
+        metrics_path = (
+            project_root
+            / "outputs"
+            / "uci_model_comparison"
+            / f"uci_{subject}_model_metrics.csv"
+        )
+        if not metrics_path.is_file():
+            self.table_uci_metrics.setRowCount(0)
+            self.lbl_uci_status.setText(
+                "Chưa có kết quả đã lưu cho bộ dữ liệu này. Bấm “Chạy huấn luyện và đánh giá” để bắt đầu."
+            )
+            self.lbl_uci_result_summary.setText("Chưa có kết quả thực nghiệm.")
+            self.card_uci_best_model.set_value("—", "Chưa có kết quả", "green")
+            self.card_uci_cv_mae.set_value("—", "Chưa có kết quả", "blue")
+            self.card_uci_test_mae.set_value("—", "Chưa có kết quả", "violet")
+            return
+        try:
+            metrics = pd.read_csv(metrics_path)
+            required = {
+                "cv_mae_mean",
+                "cv_mae_std",
+                "cv_rmse_mean",
+                "cv_r2_mean",
+                "mae",
+                "rmse",
+                "r2",
+                "cv_training_seconds",
+                "train_rows",
+                "test_rows",
+            }
+            if not required.issubset(metrics.columns):
+                raise ValueError(
+                    "Kết quả cũ chưa có chỉ số kiểm định chéo. Hãy chạy lại thực nghiệm."
+                )
+            dataset_rows = 649 if subject == "por" else 395
+            train_rows = int(metrics.iloc[0]["train_rows"])
+            test_rows = int(metrics.iloc[0]["test_rows"])
+            self._render_uci_benchmark_metrics(
+                metrics,
+                dataset_rows=dataset_rows,
+                train_rows=train_rows,
+                test_rows=test_rows,
+            )
+            self.lbl_uci_status.setText(
+                f"Đang hiển thị kết quả thực nghiệm đã lưu: {metrics_path}"
+            )
+        except Exception as exc:
+            logging.exception("Could not load saved UCI benchmark results")
+            self.lbl_uci_status.setText(
+                f"Không thể đọc kết quả đã lưu: {self._user_error(exc)}"
+            )
+
+    def _render_uci_benchmark_metrics(
+        self,
+        metrics: pd.DataFrame,
+        dataset_rows: int,
+        train_rows: int,
+        test_rows: int,
+    ) -> None:
+        if metrics.empty:
+            raise ValueError("Không có kết quả để hiển thị.")
+        ordered = metrics.sort_values(
+            by=["cv_mae_mean", "cv_rmse_mean"],
+            ascending=True,
+        ).reset_index(drop=True)
+        best = ordered.iloc[0]
+        self.card_uci_best_model.set_value(
+            str(best["model"]),
+            "Được chọn theo MAE trung bình của 5 lượt kiểm định chéo",
+            "green",
+        )
+        self.card_uci_cv_mae.set_value(
+            f"{best['cv_mae_mean']:.3f}",
+            f"Độ lệch chuẩn: {best['cv_mae_std']:.3f}",
+            "blue",
+        )
+        self.card_uci_test_mae.set_value(
+            f"{best['mae']:.3f}",
+            f"RMSE: {best['rmse']:.3f} · R²: {best['r2']:.3f}",
+            "violet",
+        )
+        self.lbl_uci_result_summary.setText(
+            f"Đã sử dụng {dataset_rows:,} bản ghi: {train_rows:,} bản ghi huấn luyện "
+            f"và {test_rows:,} bản ghi kiểm thử. Ba thuật toán dùng chung 5 phần dữ liệu "
+            "kiểm định chéo; tập kiểm thử chỉ được dùng ở bước đánh giá cuối cùng."
+        )
+
+        headers = [
+            "Thuật toán",
+            "MAE kiểm định chéo (TB ± ĐLC)",
+            "RMSE kiểm định chéo",
+            "R² kiểm định chéo",
+            "MAE kiểm thử",
+            "RMSE kiểm thử",
+            "R² kiểm thử",
+            "Thời gian (giây)",
+        ]
+        self.table_uci_metrics.setSortingEnabled(False)
+        self.table_uci_metrics.setColumnCount(len(headers))
+        self.table_uci_metrics.setHorizontalHeaderLabels(headers)
+        self.table_uci_metrics.setRowCount(len(ordered))
+        for row_index, (_, row) in enumerate(ordered.iterrows()):
+            values = [
+                str(row["model"]),
+                f"{row['cv_mae_mean']:.3f} ± {row['cv_mae_std']:.3f}",
+                f"{row['cv_rmse_mean']:.3f}",
+                f"{row['cv_r2_mean']:.3f}",
+                f"{row['mae']:.3f}",
+                f"{row['rmse']:.3f}",
+                f"{row['r2']:.3f}",
+                f"{row['cv_training_seconds']:.2f}",
+            ]
+            for column_index, value in enumerate(values):
+                item = QTableWidgetItem(value)
+                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+                self.table_uci_metrics.setItem(row_index, column_index, item)
+        self.table_uci_metrics.setSortingEnabled(True)
+
     def _build_reports_page(self, body: QWidget, layout: QVBoxLayout) -> None:
         frame, frame_layout = self._surface("Xuất dữ liệu và kết quả")
         intro = QLabel("Chọn loại dữ liệu đang có trong phiên làm việc rồi xuất ra CSV hoặc Excel.")
@@ -654,7 +1052,7 @@ class MainWindow(QMainWindow):
         frame_layout.addWidget(intro)
         row = QHBoxLayout()
         self.cb_report_type = QComboBox()
-        self.cb_report_type.addItem("Dataset đã nhập", "dataset")
+        self.cb_report_type.addItem("Bộ dữ liệu đã nhập", "dataset")
         self.cb_report_type.addItem("Kết quả dự đoán điểm", "prediction")
         self.cb_report_type.addItem("Kết quả nguy cơ học vụ", "risk")
         row.addWidget(self.cb_report_type, 1)
@@ -721,7 +1119,7 @@ class MainWindow(QMainWindow):
         self.content_area.setCurrentIndex(index)
         for i, button in enumerate(self.nav_buttons):
             button.setChecked(i == index)
-        self.settings_nav_button.setChecked(index == 7)
+        self.settings_nav_button.setChecked(index == 8)
         self.topbar_context.setText(self._page_titles[index].upper())
         if index == 0:
             self._update_dashboard()
@@ -729,7 +1127,9 @@ class MainWindow(QMainWindow):
             self._refresh_eda_options()
         elif index == 5:
             self._update_model_status()
-        elif index == 7:
+        elif index == 6:
+            self._refresh_uci_benchmark_results()
+        elif index == 8:
             self._refresh_settings()
 
     def _update_all_status(self) -> None:
@@ -742,7 +1142,7 @@ class MainWindow(QMainWindow):
             self.lbl_dataset_badge.setText("Chưa có dữ liệu")
             self.lbl_dataset_badge.setStyleSheet("background:#F2F4F7;color:#475467;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         else:
-            filename = Path(self.current_file_path).name if self.current_file_path else "Dataset đã nạp"
+            filename = Path(self.current_file_path).name if self.current_file_path else "Bộ dữ liệu đã nạp"
             self.lbl_dataset_badge.setText(f"{filename} · {len(self.current_df):,} dòng")
             self.lbl_dataset_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         ready = self._is_model_ready()
@@ -750,7 +1150,7 @@ class MainWindow(QMainWindow):
             self.lbl_model_badge.setText(f"XGBoost {ACTIVE_MODEL_VERSION} sẵn sàng")
             self.lbl_model_badge.setStyleSheet("background:#ECFDF3;color:#027A48;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
         else:
-            self.lbl_model_badge.setText("Model chưa sẵn sàng")
+            self.lbl_model_badge.setText("Mô hình chưa sẵn sàng")
             self.lbl_model_badge.setStyleSheet("background:#FEF3F2;color:#B42318;padding:7px 10px;border-radius:7px;font-size:11px;font-weight:600;")
 
     def _is_model_ready(self) -> bool:
@@ -798,7 +1198,7 @@ class MainWindow(QMainWindow):
         ready = self._is_model_ready()
         self.card_model.set_value(
             "Sẵn sàng" if ready else "Chưa sẵn sàng",
-            "Artifact và registry hợp lệ" if ready else "Cần huấn luyện và lưu model hợp lệ",
+            "Tệp mô hình hợp lệ" if ready else "Cần huấn luyện và lưu mô hình hợp lệ",
             "green" if ready else "violet",
         )
         self._update_global_badges()
@@ -1401,12 +1801,12 @@ class MainWindow(QMainWindow):
             if ready:
                 self.lbl_model_page_status.setText(f"XGBoost {ACTIVE_MODEL_VERSION} đã sẵn sàng")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#027A48;")
-                self.lbl_model_details.setText(f"Registry xác nhận có metadata và artifact của XGBoost {ACTIVE_MODEL_VERSION}.")
+                self.lbl_model_details.setText(f"Kho lưu trữ xác nhận có thông tin và tệp mô hình XGBoost {ACTIVE_MODEL_VERSION}.")
             else:
                 self.lbl_model_page_status.setText("Chưa có model dùng được")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B42318;")
                 self.lbl_model_details.setText(
-                    "Không tìm thấy model đã huấn luyện hợp lệ. Chọn riêng một tệp dữ liệu lịch sử có nhãn khi bấm Huấn luyện XGBoost; tệp sinh viên cần dự đoán không cần điểm cuối kỳ."
+                    "Không tìm thấy mô hình đã huấn luyện hợp lệ. Chọn riêng một tệp dữ liệu lịch sử có nhãn khi bấm Huấn luyện XGBoost; tệp sinh viên cần dự đoán không cần điểm cuối kỳ."
                 )
         if hasattr(self, "card_model"):
             self.card_model.set_value(
@@ -1438,8 +1838,8 @@ class MainWindow(QMainWindow):
                 ("Môi trường", config.env),
                 ("Dữ liệu gốc", config.data_raw_dir),
                 ("Dữ liệu đã xử lý", config.data_processed_dir),
-                ("Model registry", config.model_registry_path),
-                ("Thư mục artifact", config.model_artifacts_dir),
+                ("Kho lưu mô hình", config.model_registry_path),
+                ("Thư mục tệp mô hình", config.model_artifacts_dir),
                 ("Thư mục báo cáo", config.report_output_dir),
             ]
             self.settings_text.setText("\n".join(f"{label}: {value}" for label, value in entries))
@@ -1459,7 +1859,7 @@ class MainWindow(QMainWindow):
                 or (key == "risk" and self.risk_df is not None)
             )
             self.cb_report_type.setItemText(index, {
-                "dataset": "Dataset đã nhập",
+                "dataset": "Bộ dữ liệu đã nhập",
                 "prediction": "Kết quả dự đoán điểm",
                 "risk": "Kết quả nguy cơ học vụ",
             }.get(key, str(key)))
