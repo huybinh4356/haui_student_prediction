@@ -34,7 +34,6 @@ def test_bootstrap():
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
-    app.setStyle("Fusion")
 
     window = MainWindow(
         dataset_service=dataset_service,
@@ -47,7 +46,7 @@ def test_bootstrap():
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
     print("WINDOW TITLE:", window.windowTitle())
     print("MODEL READY CHECK:", prediction_service.is_model_ready("1.0.0"))
-    print("KPI MODEL TEXT:", window.lbl_kpi_model.text())
+    print("KPI MODEL TEXT:", window.card_model.value_label.text())
     print("INIT SUCCESS!")
 
 if __name__ == "__main__":
