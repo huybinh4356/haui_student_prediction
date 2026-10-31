@@ -34,6 +34,8 @@ def test_bootstrap():
     app = QApplication.instance()
     if app is None:
         app = QApplication(sys.argv)
+    if app is None:
+        raise RuntimeError("Không thể khởi tạo QApplication.")
 
     window = MainWindow(
         dataset_service=dataset_service,
@@ -44,6 +46,7 @@ def test_bootstrap():
     
     import io
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    app.processEvents()
     print("WINDOW TITLE:", window.windowTitle())
     print("MODEL READY CHECK:", prediction_service.is_model_ready("1.0.0"))
     print("KPI MODEL TEXT:", window.card_model.value_label.text())
