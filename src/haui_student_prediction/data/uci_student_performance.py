@@ -55,13 +55,77 @@ SOURCE_COLUMNS = {
 REQUIRED_SOURCE_COLUMNS = list(SOURCE_COLUMNS)
 
 
-def _archive_has_required_files(archive_path: Path) -> bool:
+def _zip_bytes_have_required_files(archive_bytes: bytes) -> bool:
     try:
-        with zipfile.ZipFile(archive_path) as archive:
-            available_files = {Path(name).name for name in archive.namelist()}
-            return set(SUBJECT_FILES.values()).issubset(available_files)
+        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
+            members = archive.namelist()
+            available_files = {Path(name).name for name in members}
+            expected_files = set(SUBJECT_FILES.values())
+            if expected_files.issubset(available_files):
+                return True
+
+            nested_archives = [
+                name for name in members
+                if Path(name).name.lower() == "student.zip"
+            ]
+            for nested_name in nested_archives:
+                try:
+                    nested_bytes = archive.read(nested_name)
+                    with zipfile.ZipFile(BytesIO(nested_bytes)) as nested:
+                        nested_files = {
+                            Path(name).name for name in nested.namelist()
+                        }
+                        if expected_files.issubset(nested_files):
+                            return True
+                except (KeyError, OSError, zipfile.BadZipFile):
+                    continue
     except (OSError, zipfile.BadZipFile):
         return False
+    return False
+
+
+def _archive_has_required_files(archive_path: Path) -> bool:
+    try:
+        return _zip_bytes_have_required_files(archive_path.read_bytes())
+    except OSError:
+        return False
+
+
+def _read_csv_from_archive(archive_path: Path, expected_name: str) -> pd.DataFrame:
+    with zipfile.ZipFile(archive_path) as archive:
+        members = archive.namelist()
+        direct_member = next(
+            (name for name in members if Path(name).name == expected_name),
+            None,
+        )
+        if direct_member is not None:
+            with archive.open(direct_member) as stream:
+                return pd.read_csv(stream, sep=";", encoding="utf-8")
+
+        nested_name = next(
+            (
+                name for name in members
+                if Path(name).name.lower() == "student.zip"
+            ),
+            None,
+        )
+        if nested_name is not None:
+            nested_bytes = archive.read(nested_name)
+            with zipfile.ZipFile(BytesIO(nested_bytes)) as nested:
+                nested_member = next(
+                    (
+                        name for name in nested.namelist()
+                        if Path(name).name == expected_name
+                    ),
+                    None,
+                )
+                if nested_member is not None:
+                    with nested.open(nested_member) as stream:
+                        return pd.read_csv(stream, sep=";", encoding="utf-8")
+
+    raise FileNotFoundError(
+        f"Không tìm thấy {expected_name} ở trong gói ZIP UCI, kể cả ZIP lồng bên trong."
+    )
 
 
 def _download_archive(raw_dir: Path) -> Path:
@@ -95,15 +159,11 @@ def _download_archive(raw_dir: Path) -> Path:
         ) from exc
 
     try:
-        with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
-            available_files = {Path(name).name for name in archive.namelist()}
-            expected_files = set(SUBJECT_FILES.values())
-            if not expected_files.issubset(available_files):
-                missing = sorted(expected_files - available_files)
-                raise ValueError(
-                    "Tệp ZIP không có đủ dữ liệu cần thiết. "
-                    f"Thiếu: {', '.join(missing)}."
-                )
+        if not _zip_bytes_have_required_files(archive_bytes):
+            raise ValueError(
+                "Gói ZIP không chứa student-por.csv và student-mat.csv, "
+                "kể cả khi các tệp CSV được đặt trong student.zip bên trong."
+            )
     except (zipfile.BadZipFile, ValueError) as exc:
         raise RuntimeError(
             "Tệp tải về không phải bộ dữ liệu UCI Student Performance hợp lệ. "
@@ -129,16 +189,10 @@ def _read_source(subject: str, data_file: str | Path | None, raw_dir: str | Path
     expected_name = SUBJECT_FILES[subject]
 
     try:
-        with zipfile.ZipFile(archive_path) as archive:
-            member = next(
-                name for name in archive.namelist()
-                if Path(name).name == expected_name
-            )
-            with archive.open(member) as stream:
-                return pd.read_csv(stream, sep=";", encoding="utf-8")
-    except (zipfile.BadZipFile, KeyError, StopIteration) as exc:
+        return _read_csv_from_archive(archive_path, expected_name)
+    except (OSError, zipfile.BadZipFile, FileNotFoundError) as exc:
         raise RuntimeError(
-            f"Không tìm thấy {expected_name} trong bộ dữ liệu UCI đã tải."
+            f"Không thể đọc {expected_name} trong gói dữ liệu UCI đã tải."
         ) from exc
 
 
