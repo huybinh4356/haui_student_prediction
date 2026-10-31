@@ -16,9 +16,9 @@ from PyQt6.QtGui import QStandardItemModel
 from PyQt6.QtWidgets import (
     QApplication,
     QComboBox,
-    QLayout,
     QFileDialog,
     QFrame,
+    QLayout,
     QGridLayout,
     QHBoxLayout,
     QHeaderView,
