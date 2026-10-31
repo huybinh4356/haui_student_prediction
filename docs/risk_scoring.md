@@ -61,7 +61,7 @@ A risk result is evaluated only when all of the following values are present, fi
 | `stress_score` | 1-5 |
 | `motivation_score` | 1-5 |
 
-Missing columns, blank cells, non-numeric values, non-finite values, or out-of-range values cause that student's risk evaluation to be marked as not evaluated. The application displays the specific fields that need correction. It does not replace missing risk inputs with zero, averages, or other fabricated values. A missing risk input does not by itself cancel a valid final-exam score prediction.
+Missing columns or blank cells cause that student's risk evaluation to be marked as not evaluated, while a valid final-exam score prediction may still be shown. The application displays the specific missing fields. Non-numeric, non-finite, or out-of-range source values are rejected during import or historical training; the risk service repeats its checks for records supplied through other paths. It does not replace missing risk inputs with zero, averages, or other fabricated values.
 
 ## Important Notes
 
