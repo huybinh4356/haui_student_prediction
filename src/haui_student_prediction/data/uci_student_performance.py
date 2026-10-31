@@ -13,7 +13,7 @@ UCI_DATASET_ID = 320
 UCI_DATASET_NAME = "Student Performance"
 UCI_DATASET_DOI = "10.24432/C5TG7T"
 UCI_DATASET_LICENSE = "CC BY 4.0"
-UCI_DOWNLOAD_URL = "https://archive.ics.uci.edu/static/public/320/student+performance.zip"
+UCI_DOWNLOAD_URL = "https://archive.ics.uci.edu/static/public/320/student%2Bperformance.zip"
 
 SUBJECT_FILES = {
     "por": "student-por.csv",
@@ -55,41 +55,59 @@ SOURCE_COLUMNS = {
 REQUIRED_SOURCE_COLUMNS = list(SOURCE_COLUMNS)
 
 
+def _archive_has_required_files(archive_path: Path) -> bool:
+    try:
+        with zipfile.ZipFile(archive_path) as archive:
+            available_files = {Path(name).name for name in archive.namelist()}
+            return set(SUBJECT_FILES.values()).issubset(available_files)
+    except (OSError, zipfile.BadZipFile):
+        return False
+
+
 def _download_archive(raw_dir: Path) -> Path:
     raw_dir.mkdir(parents=True, exist_ok=True)
     archive_path = raw_dir / "student+performance.zip"
 
-    if archive_path.exists():
-        try:
-            with zipfile.ZipFile(archive_path):
-                return archive_path
-        except zipfile.BadZipFile:
-            archive_path.unlink()
+    if archive_path.exists() and _archive_has_required_files(archive_path):
+        return archive_path
+    archive_path.unlink(missing_ok=True)
 
     request = Request(
         UCI_DOWNLOAD_URL,
-        headers={"User-Agent": "HaUI-Student-Prediction/1.0"},
+        headers={
+            "User-Agent": "Mozilla/5.0 HaUI-Student-Prediction/1.0",
+            "Accept": "application/zip, application/octet-stream;q=0.9, */*;q=0.8",
+        },
     )
     try:
         with urlopen(request, timeout=45) as response:
             archive_bytes = response.read()
+            content_type = response.headers.get("Content-Type", "không xác định")
+            final_url = response.geturl()
     except Exception as exc:
         raise RuntimeError(
             "Không thể tải bộ dữ liệu UCI Student Performance. "
-            "Kiểm tra kết nối mạng hoặc tải student.zip từ trang UCI rồi đặt vào "
+            "Kiểm tra kết nối mạng hoặc tải tệp student.zip từ trang UCI rồi đặt vào "
             f"{raw_dir}."
         ) from exc
 
     try:
         with zipfile.ZipFile(BytesIO(archive_bytes)) as archive:
-            expected_files = set(SUBJECT_FILES.values())
             available_files = {Path(name).name for name in archive.namelist()}
+            expected_files = set(SUBJECT_FILES.values())
             if not expected_files.issubset(available_files):
+                missing = sorted(expected_files - available_files)
                 raise ValueError(
-                    "Tệp ZIP tải từ UCI không chứa đủ student-mat.csv và student-por.csv."
+                    "Tệp ZIP không có đủ dữ liệu cần thiết. "
+                    f"Thiếu: {', '.join(missing)}."
                 )
     except (zipfile.BadZipFile, ValueError) as exc:
-        raise RuntimeError("Tệp tải về không phải bộ dữ liệu UCI Student Performance hợp lệ.") from exc
+        raise RuntimeError(
+            "Tệp tải về không phải bộ dữ liệu UCI Student Performance hợp lệ. "
+            f"Máy chủ trả về Content-Type '{content_type}', URL cuối: {final_url}. "
+            "Có thể mạng trường, proxy hoặc phần mềm bảo mật đã thay nội dung tải về. "
+            "Hãy tải student.zip trực tiếp từ trang UCI và chọn tệp CSV tương ứng."
+        ) from exc
 
     archive_path.write_bytes(archive_bytes)
     return archive_path
