@@ -965,6 +965,7 @@ class MainWindow(QMainWindow):
         try:
             metrics = pd.read_csv(metrics_path)
             required = {
+                "cv_folds",
                 "cv_mae_mean",
                 "cv_mae_std",
                 "cv_rmse_mean",
@@ -978,7 +979,11 @@ class MainWindow(QMainWindow):
             }
             if not required.issubset(metrics.columns):
                 raise ValueError(
-                    "Kết quả cũ chưa có chỉ số kiểm định chéo. Hãy chạy lại thực nghiệm."
+                    "Kết quả cũ chưa có đầy đủ chỉ số kiểm định chéo. Hãy chạy lại thực nghiệm."
+                )
+            if not pd.to_numeric(metrics["cv_folds"], errors="coerce").eq(5).all():
+                raise ValueError(
+                    "Kết quả đã lưu không sử dụng kiểm định chéo 5 phần. Hãy chạy lại từ trang này."
                 )
             dataset_rows = 649 if subject == "por" else 395
             train_rows = int(metrics.iloc[0]["train_rows"])
