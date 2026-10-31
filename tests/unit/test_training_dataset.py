@@ -109,3 +109,39 @@ def test_training_dataset_rejects_infinite_target_values(tmp_path):
 )
 def test_non_final_exam_columns_are_not_historical_targets(column_name):
     assert not is_training_target_column(column_name)
+
+
+
+def test_training_dataset_rejects_final_exam_target_outside_zero_to_ten(tmp_path):
+    rows = [
+        {
+            "Mã SV": f"SV{index + 1:03d}",
+            "Điểm TX1": 7.0,
+            "Điểm GK": 7.5,
+            "Điểm thi": 10.5 if index == 0 else 8.0,
+        }
+        for index in range(12)
+    ]
+    source = tmp_path / "history_target_out_of_range.csv"
+    pd.DataFrame(rows).to_csv(source, index=False, encoding="utf-8-sig")
+
+    with pytest.raises(ValueError, match="0–10"):
+        load_historical_training_dataset(str(source))
+
+
+def test_training_dataset_rejects_feature_outside_configured_range(tmp_path):
+    rows = [
+        {
+            "Mã SV": f"SV{index + 1:03d}",
+            "Tỷ lệ nghỉ": 5.0,
+            "Điểm TX1": 10.5 if index == 0 else 7.0,
+            "Điểm GK": 7.5,
+            "Điểm thi": 8.0,
+        }
+        for index in range(12)
+    ]
+    source = tmp_path / "history_feature_out_of_range.csv"
+    pd.DataFrame(rows).to_csv(source, index=False, encoding="utf-8-sig")
+
+    with pytest.raises(ValueError, match="Điểm thường xuyên 1"):
+        load_historical_training_dataset(str(source))
