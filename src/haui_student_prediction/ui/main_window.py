@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
             "Dự đoán điểm",
             "Dự đoán nguy cơ học vụ",
             "Mô hình dự đoán",
-            "Huấn luyện & so sánh",
+            "Huấn luyện và so sánh",
             "Báo cáo",
             "Cấu hình",
         ]
@@ -344,7 +344,7 @@ class MainWindow(QMainWindow):
             ("Dự đoán điểm", "SP_MediaPlay"),
             ("Dự đoán nguy cơ học vụ", "SP_MessageBoxWarning"),
             ("Mô hình dự đoán", "SP_BrowserReload"),
-            ("Huấn luyện & so sánh", "SP_BrowserReload"),
+            ("Huấn luyện và so sánh", "SP_BrowserReload"),
             ("Báo cáo", "SP_FileDialogListView"),
         ]
         standard_icons = {
@@ -797,6 +797,26 @@ class MainWindow(QMainWindow):
         split_layout.addWidget(split_note)
         layout.addWidget(split_frame)
 
+        fields_frame, fields_layout = self._surface("Các thông tin được đưa vào huấn luyện")
+        fields_note = QLabel(
+            "Điểm giai đoạn 1 · Điểm giai đoạn 2 · Mức thời gian tự học · Số lần trượt môn trước đây · "
+            "Số buổi vắng · Hỗ trợ học tập tại trường · Hỗ trợ từ gia đình · Học thêm có phí · "
+            "Định hướng học lên · Khả năng truy cập Internet tại nhà."
+        )
+        fields_note.setWordWrap(True)
+        fields_note.setObjectName("Muted")
+        fields_layout.addWidget(fields_note)
+        target_note = QLabel(
+            "Kết quả cần dự đoán: điểm tổng kết môn học (G3). Đây là điểm tổng kết theo bộ dữ liệu UCI, "
+            "không phải điểm thi cuối kỳ riêng biệt."
+        )
+        target_note.setWordWrap(True)
+        target_note.setStyleSheet(
+            "color:#1D4ED8;background:#EFF6FF;border-radius:8px;padding:10px;"
+        )
+        fields_layout.addWidget(target_note)
+        layout.addWidget(fields_frame)
+
         result_frame, result_layout = self._surface("Kết quả thực nghiệm")
         result_cards = QGridLayout()
         result_cards.setSpacing(12)
@@ -826,7 +846,7 @@ class MainWindow(QMainWindow):
                 "MAE kiểm thử",
                 "RMSE kiểm thử",
                 "R² kiểm thử",
-                "Thời gian (giây)",
+                "Thời gian 5 lượt (giây)",
             ]
         )
         self.table_uci_metrics.setMinimumHeight(250)
@@ -1026,7 +1046,7 @@ class MainWindow(QMainWindow):
             "MAE kiểm thử",
             "RMSE kiểm thử",
             "R² kiểm thử",
-            "Thời gian (giây)",
+            "Thời gian 5 lượt (giây)",
         ]
         self.table_uci_metrics.setSortingEnabled(False)
         self.table_uci_metrics.setColumnCount(len(headers))
