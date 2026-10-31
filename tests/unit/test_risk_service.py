@@ -104,3 +104,61 @@ def test_risk_score_in_range(service):
     assert 0 <= r.weighted_score <= 100
 
 
+
+
+
+def test_risk_validation_reports_all_missing_required_fields(service):
+    row = _row().drop(
+        labels=[
+            "absence_percentage",
+            "lms_learning_percentage",
+            "interaction_score",
+            "stress_score",
+            "motivation_score",
+        ]
+    )
+
+    issues = service.validate_student_record(row)
+
+    assert len(issues) == 5
+    assert any("absence_percentage" in issue for issue in issues)
+    assert any("lms_learning_percentage" in issue for issue in issues)
+    assert any("interaction_score" in issue for issue in issues)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("absence_percentage", 100.1),
+        ("lms_learning_percentage", -0.1),
+        ("predicted_course_score", 10.1),
+        ("interaction_score", 5.1),
+        ("stress_score", 0.9),
+        ("motivation_score", 6.0),
+    ],
+)
+def test_risk_validation_rejects_values_outside_configured_ranges(service, field, value):
+    issues = service.validate_student_record(_row(**{field: value}))
+
+    assert issues
+    assert field in issues[0]
+
+
+def test_risk_evaluation_refuses_invalid_inputs_without_fabricating_a_score(service):
+    with pytest.raises(ValueError, match="interaction_score"):
+        service.evaluate_student_risk(_row(interaction_score=6.0))
+
+
+def test_risk_validation_accepts_boundary_values(service):
+    row = _row(
+        absence_percentage=0.0,
+        lms_learning_percentage=100.0,
+        predicted_course_score=10.0,
+        interaction_score=1.0,
+        stress_score=5.0,
+        motivation_score=1.0,
+    )
+
+    assert service.validate_student_record(row) == []
+    result = service.evaluate_student_risk(row)
+    assert 0 <= result.weighted_score <= 100
