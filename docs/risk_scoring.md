@@ -48,6 +48,21 @@ At exactly 30%, the attendance override does not trigger. Above 30%, the overrid
 | 60-<80 | High |
 | 80-100 | Very high |
 
+## Required inputs and validation
+
+A risk result is evaluated only when all of the following values are present, finite, and within the configured range:
+
+| Field | Allowed range |
+|-------|---------------|
+| `absence_percentage` | 0-100 |
+| `lms_learning_percentage` | 0-100 |
+| `predicted_course_score` | 0-10 |
+| `interaction_score` | 1-5 |
+| `stress_score` | 1-5 |
+| `motivation_score` | 1-5 |
+
+Missing columns, blank cells, non-numeric values, non-finite values, or out-of-range values cause that student's risk evaluation to be marked as not evaluated. The application displays the specific fields that need correction. It does not replace missing risk inputs with zero, averages, or other fabricated values. A missing risk input does not by itself cancel a valid final-exam score prediction.
+
 ## Important Notes
 
 - Thresholds are prototype assumptions until calibrated against representative HaUI historical data.
