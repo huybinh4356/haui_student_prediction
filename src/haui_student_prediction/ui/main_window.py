@@ -1851,7 +1851,7 @@ class MainWindow(QMainWindow):
             )
             if incomplete_count:
                 message += (
-                    f"\\n{incomplete_count:,} bản ghi chưa đủ hoặc sai dữ liệu nguy cơ. "
+                    f"\n{incomplete_count:,} bản ghi chưa đủ hoặc sai dữ liệu nguy cơ. "
                     "Mở trang Dự đoán nguy cơ học vụ và xem cột Lý do chưa đánh giá nguy cơ."
                 )
             QMessageBox.information(self, "Dự đoán hoàn tất", message)
