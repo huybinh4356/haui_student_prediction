@@ -155,7 +155,7 @@ class _TrainingWorker(QThread):
                 contract=contract,
             )
             if not registry.has_model(ACTIVE_MODEL_VERSION):
-                raise RuntimeError("Model đã được lưu nhưng không thể xác minh trạng thái registry.")
+                raise RuntimeError("Mô hình đã được lưu nhưng không thể xác minh trong kho lưu trữ.")
 
             self.succeeded.emit(
                 {
@@ -216,7 +216,7 @@ class _UciBenchmarkWorker(QThread):
             metrics.to_csv(metrics_path, index=False, encoding="utf-8-sig")
             predictions.to_csv(predictions_path, index=False, encoding="utf-8-sig")
             metadata_path.write_text(
-                "\\n".join(
+                "\n".join(
                     [
                         f"dataset={UCI_DATASET_NAME}",
                         "dataset_id=320",
@@ -486,7 +486,7 @@ class MainWindow(QMainWindow):
 
         cards = QGridLayout()
         cards.setSpacing(12)
-        self.card_records = _MetricCard("BẢN GHI ĐÃ NẠP", "—", "Chưa có dataset", "blue")
+        self.card_records = _MetricCard("BẢN GHI ĐÃ NẠP", "—", "Chưa có bộ dữ liệu", "blue")
         self.card_missing = _MetricCard("Ô DỮ LIỆU THIẾU", "—", "Chưa có dataset", "amber")
         self.card_absence = _MetricCard("VƯỢT NGƯỠNG NGHỈ HỌC", "—", "Ngưỡng cấu hình > 30%", "red")
         self.card_model = _MetricCard("MÔ HÌNH DỰ ĐOÁN", "Chưa sẵn sàng", "Cần model đã huấn luyện", "violet")
@@ -507,7 +507,7 @@ class MainWindow(QMainWindow):
         self.dashboard_chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.dashboard_chart_placeholder.setMinimumHeight(230)
         chart_layout.addWidget(self.dashboard_chart_placeholder)
-        summary_frame, summary_layout = self._surface("Tình trạng dataset")
+        summary_frame, summary_layout = self._surface("Tình trạng bộ dữ liệu")
         self.dashboard_summary = QLabel("Chưa có dữ liệu được nạp vào phiên làm việc.")
         self.dashboard_summary.setWordWrap(True)
         self.dashboard_summary.setAlignment(Qt.AlignmentFlag.AlignTop)
@@ -630,7 +630,7 @@ class MainWindow(QMainWindow):
         row.addWidget(self.btn_predict)
         setup_layout.addLayout(row)
         self.lbl_prediction_notice = QLabel(
-            "Chọn một profile phù hợp với cấu trúc điểm của dataset. Nếu một file chứa nhiều loại học phần, cần tách file hoặc bổ sung mapping theo học phần."
+            "Chọn cấu hình phù hợp với cấu trúc điểm của học phần. Nếu một tệp chứa nhiều loại học phần, cần tách tệp hoặc bổ sung quy tắc ánh xạ theo học phần."
         )
         self.lbl_prediction_notice.setWordWrap(True)
         self.lbl_prediction_notice.setStyleSheet("color:#475467;background:#EFF6FF;border-radius:8px;padding:10px;")
@@ -697,13 +697,13 @@ class MainWindow(QMainWindow):
         self.btn_model_refresh.clicked.connect(self._update_model_status)
         top.addWidget(self.btn_model_refresh)
         state_layout.addLayout(top)
-        self.lbl_model_details = QLabel("Chưa có metadata model.")
+        self.lbl_model_details = QLabel("Chưa có thông tin mô hình.")
         self.lbl_model_details.setWordWrap(True)
         self.lbl_model_details.setObjectName("Muted")
         state_layout.addWidget(self.lbl_model_details)
         layout.addWidget(state_frame)
 
-        train_frame, train_layout = self._surface("Huấn luyện từ dữ liệu lịch sử")
+        train_frame, train_layout = self._surface("Huấn luyện mô hình HaUI từ dữ liệu lịch sử")
         explainer = QLabel(
             "Dữ liệu sinh viên dùng để dự đoán không cần điểm cuối kỳ. Khi huấn luyện, hãy chọn riêng một tệp dữ liệu lịch sử đã có kết quả cuối kỳ; nhãn lịch sử chỉ được dùng để học và đánh giá mô hình, không đi vào đầu vào dự đoán."
         )
@@ -1181,7 +1181,7 @@ class MainWindow(QMainWindow):
                 self.card_absence.set_value("—", "Không có cột absence_percentage", "amber")
             self.card_records.set_value(f"{len(df):,}", f"{len(df.columns)} cột trong dataset", "blue")
             self.card_missing.set_value(f"{missing_cells:,}", "Ô thiếu trong dữ liệu đang nạp", "amber" if missing_cells else "green")
-            path_text = Path(self.current_file_path).name if self.current_file_path else "Dataset hiện tại"
+            path_text = Path(self.current_file_path).name if self.current_file_path else "Bộ dữ liệu hiện tại"
             summary_lines = [
                 f"Nguồn dữ liệu: {path_text}",
                 f"Số bản ghi: {len(df):,}",
@@ -1355,18 +1355,77 @@ class MainWindow(QMainWindow):
             f"Hiển thị {displayed:,}/{len(self.current_df):,} bản ghi để giữ giao diện phản hồi tốt."
         )
 
+    def _display_column_name(self, column: Any) -> str:
+        labels = {
+            "student_id": "Mã sinh viên",
+            "full_name": "Họ và tên",
+            "date_of_birth": "Ngày sinh",
+            "birth_year": "Năm sinh",
+            "hometown": "Quê quán",
+            "major": "Ngành học",
+            "course_id": "Mã học phần",
+            "semester": "Học kỳ",
+            "absence_percentage": "Tỷ lệ nghỉ học (%)",
+            "lms_learning_percentage": "Tỷ lệ học tập trên LMS (%)",
+            "tx1_score": "Điểm thường xuyên 1",
+            "tx2_score": "Điểm thường xuyên 2",
+            "midterm_score": "Điểm giữa kỳ",
+            "target_final_exam_score": "Điểm thi cuối kỳ thực tế",
+            "predicted_final_exam_score": "Điểm thi cuối kỳ dự đoán",
+            "predicted_course_score": "Điểm học phần dự đoán",
+            "interaction_score": "Mức độ tương tác",
+            "stress_score": "Mức độ căng thẳng",
+            "motivation_score": "Động lực học tập",
+            "works_part_time": "Đi làm thêm",
+            "absence_status": "Trạng thái nghỉ học",
+            "weighted_score": "Điểm nguy cơ",
+            "risk_category": "Mức nguy cơ học vụ",
+            "override_triggered": "Kích hoạt ngưỡng bắt buộc",
+            "evaluation_status": "Trạng thái đánh giá",
+            "academic_risk_score": "Điểm nguy cơ học vụ",
+            "academic_risk_category": "Mức nguy cơ học vụ",
+            "academic_risk_override": "Trạng thái vượt ngưỡng nghỉ học",
+            "academic_risk_status": "Trạng thái đánh giá nguy cơ",
+            "snapshot_date": "Ngày chốt dữ liệu",
+            "source_file": "Tệp dữ liệu nguồn",
+            "dataset_version": "Phiên bản bộ dữ liệu",
+            "weekly_study_time_level": "Mức thời gian tự học",
+            "past_class_failures": "Số lần trượt môn trước đây",
+            "absence_count": "Số buổi vắng",
+            "extra_school_support": "Được hỗ trợ học tập tại trường",
+            "family_education_support": "Được gia đình hỗ trợ học tập",
+            "paid_subject_classes": "Tham gia lớp học thêm có phí",
+            "higher_education_intent": "Dự định học lên bậc cao hơn",
+            "home_internet_access": "Có Internet tại nhà",
+            "period1_grade": "Điểm giai đoạn 1",
+            "period2_grade": "Điểm giai đoạn 2",
+            "target_course_grade": "Điểm tổng kết môn học",
+        }
+        return labels.get(str(column), str(column).replace("_", " ").capitalize())
+
     def _populate_table(self, table: QTableWidget, dataframe: pd.DataFrame, max_rows: int = 1000) -> None:
         table.setSortingEnabled(False)
         preview = dataframe.head(max_rows).copy()
         table.clear()
         table.setRowCount(len(preview))
         table.setColumnCount(len(preview.columns))
-        table.setHorizontalHeaderLabels([str(column) for column in preview.columns])
+        table.setHorizontalHeaderLabels(
+            [self._display_column_name(column) for column in preview.columns]
+        )
+        boolean_columns = {
+            "works_part_time",
+            "override_triggered",
+            "academic_risk_override",
+        }
         for row_index in range(len(preview)):
             for column_index, column in enumerate(preview.columns):
                 value = preview.iat[row_index, column_index]
                 if pd.isna(value):
                     text = "Chưa có dữ liệu"
+                elif column in boolean_columns and isinstance(value, (bool, np.bool_)):
+                    text = "Có" if bool(value) else "Không"
+                elif column == "absence_status" and str(value) == "HOC_LAI":
+                    text = "HỌC LẠI"
                 elif isinstance(value, (float, np.floating)):
                     text = f"{float(value):.3f}" if np.isfinite(value) else "Không hợp lệ"
                 else:
@@ -1428,7 +1487,7 @@ class MainWindow(QMainWindow):
 
     def _handle_plot(self) -> None:
         if self.current_df is None or self.current_df.empty:
-            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập một dataset hợp lệ trước khi tạo biểu đồ.")
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập một bộ dữ liệu hợp lệ trước khi tạo biểu đồ.")
             return
         kind = self.cb_chart_type.currentData()
         figure = None
@@ -1460,7 +1519,7 @@ class MainWindow(QMainWindow):
             elif kind == "heatmap":
                 matrix = self.chart_service.statistics.get_correlation_matrix(self.current_df)
                 if matrix.empty:
-                    raise ValueError("Dataset không có đủ biến số để tạo heatmap tương quan.")
+                    raise ValueError("Bộ dữ liệu không có đủ biến số để tạo biểu đồ tương quan.")
                 import matplotlib.pyplot as plt
                 import seaborn as sns
 
@@ -1587,12 +1646,12 @@ class MainWindow(QMainWindow):
         rmse = self._format_metric(metrics.rmse)
         r2 = self._format_metric(metrics.r2)
         self.lbl_training_status.setText(
-            f"Đã lưu model {result['version']}. Train: {result['train_rows']:,} dòng; test: {result['test_rows']:,} dòng."
+            f"Đã lưu mô hình {result['version']}. Tập huấn luyện: {result['train_rows']:,} dòng; tập kiểm thử: {result['test_rows']:,} dòng."
         )
         self.lbl_model_metrics.setText(
             f"MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
             f"Số đặc trưng: {result['feature_count']}\n"
-            f"Dataset fingerprint: {result['dataset_hash']}\n"
+            f"Mã nhận diện bộ dữ liệu: {result['dataset_hash']}\n"
             f"Features: {', '.join(result['features'])}"
         )
         self._update_all_status()
@@ -1600,7 +1659,7 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Huấn luyện hoàn tất",
-            f"Model {result['version']} đã được lưu và xác minh trong registry.\n\nMAE: {mae}\nRMSE: {rmse}\nR²: {r2}",
+            f"Mô hình {result['version']} đã được lưu và xác minh trong kho mô hình.\n\nMAE: {mae}\nRMSE: {rmse}\nR²: {r2}",
         )
 
     def _on_training_failed(self, message: str) -> None:
@@ -1616,7 +1675,7 @@ class MainWindow(QMainWindow):
 
     def _handle_predict(self) -> None:
         if self.current_df is None or self.current_df.empty:
-            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập dataset trước khi dự đoán.")
+            QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập bộ dữ liệu trước khi dự đoán.")
             return
         if "tx2_score" in self.current_df.columns:
             tx2_values = pd.to_numeric(self.current_df["tx2_score"], errors="coerce")
@@ -1668,7 +1727,7 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(
                 self,
                 "Mô hình chưa sẵn sàng",
-                "Chưa tìm thấy model đã huấn luyện hợp lệ. Mở trang Mô hình ML và chọn một tệp dữ liệu lịch sử để huấn luyện trước khi dự đoán.",
+                "Chưa tìm thấy mô hình đã huấn luyện hợp lệ. Mở trang Mô hình dự đoán HaUI và chọn một tệp dữ liệu lịch sử để huấn luyện trước khi dự đoán.",
             )
             return
         try:
@@ -1803,7 +1862,7 @@ class MainWindow(QMainWindow):
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#027A48;")
                 self.lbl_model_details.setText(f"Kho lưu trữ xác nhận có thông tin và tệp mô hình XGBoost {ACTIVE_MODEL_VERSION}.")
             else:
-                self.lbl_model_page_status.setText("Chưa có model dùng được")
+                self.lbl_model_page_status.setText("Chưa có mô hình dùng được")
                 self.lbl_model_page_status.setStyleSheet("font-size:16px;font-weight:700;color:#B42318;")
                 self.lbl_model_details.setText(
                     "Không tìm thấy mô hình đã huấn luyện hợp lệ. Chọn riêng một tệp dữ liệu lịch sử có nhãn khi bấm Huấn luyện XGBoost; tệp sinh viên cần dự đoán không cần điểm cuối kỳ."
@@ -1811,7 +1870,7 @@ class MainWindow(QMainWindow):
         if hasattr(self, "card_model"):
             self.card_model.set_value(
                 "Sẵn sàng" if ready else "Chưa sẵn sàng",
-                "Artifact và registry hợp lệ" if ready else "Cần huấn luyện và lưu model hợp lệ",
+                "Tệp mô hình hợp lệ" if ready else "Cần huấn luyện và lưu mô hình hợp lệ",
                 "green" if ready else "violet",
             )
         self._update_global_badges()
