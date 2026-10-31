@@ -7,6 +7,7 @@ from haui_student_prediction.data.uci_student_performance import (
     TARGET_COLUMN,
     load_uci_student_performance,
 )
+from haui_student_prediction.ml.uci_model_comparison import compare_uci_models
 
 
 def _make_uci_source(rows=24):
