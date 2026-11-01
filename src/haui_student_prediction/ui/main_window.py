@@ -640,7 +640,7 @@ class MainWindow(QMainWindow):
         self.cb_course_profile.addItem("Chọn cấu hình đánh giá", None)
         self.cb_course_profile.addItem("Học phần không có TX2", "no_tx2")
         self.cb_course_profile.addItem("Học phần có TX2", "with_tx2")
-        self.btn_train_from_prediction = self._primary_button("Huấn luyện mô hình", self._handle_train_model, "warning")
+        self.btn_train_from_prediction = self._primary_button("Chọn dữ liệu lịch sử & huấn luyện", self._handle_train_model, "warning")
         self.btn_predict = self._primary_button("Dự đoán điểm học phần", self._handle_predict, "success")
         row.addWidget(QLabel("Cấu hình đánh giá"))
         row.addWidget(self.cb_course_profile, 1)
@@ -649,7 +649,9 @@ class MainWindow(QMainWindow):
         row.addWidget(self.btn_predict)
         setup_layout.addLayout(row)
         self.lbl_prediction_notice = QLabel(
-            "Chọn cấu hình phù hợp với cấu trúc điểm của học phần. Nếu một tệp chứa nhiều loại học phần, cần tách tệp hoặc bổ sung quy tắc ánh xạ theo học phần."
+            "Tệp đang nhập ở trang Dữ liệu sinh viên là dữ liệu cần dự đoán và không cần điểm cuối kỳ thực tế. "
+            "Nút bên trái chỉ mở một tệp lịch sử riêng đã có điểm cuối kỳ để huấn luyện mô hình; "
+            "hai bộ dữ liệu không được trộn lẫn. Chọn đúng cấu hình TX2 theo học phần."
         )
         self.lbl_prediction_notice.setWordWrap(True)
         self.lbl_prediction_notice.setStyleSheet("color:#475467;background:#EFF6FF;border-radius:8px;padding:10px;")
@@ -736,7 +738,7 @@ class MainWindow(QMainWindow):
         self.training_progress.setVisible(False)
         train_layout.addWidget(self.training_progress)
         train_actions = QHBoxLayout()
-        self.btn_train_model = self._primary_button("Huấn luyện XGBoost", self._handle_train_model, "warning")
+        self.btn_train_model = self._primary_button("Chọn dữ liệu lịch sử & huấn luyện XGBoost", self._handle_train_model, "warning")
         self.btn_train_model.setMinimumHeight(40)
         train_actions.addWidget(self.btn_train_model)
         train_actions.addStretch(1)
@@ -1454,6 +1456,19 @@ class MainWindow(QMainWindow):
             "model_prediction_spread_ratio": "Tỷ lệ độ phân tán điểm dự đoán",
             "model_selected_candidate": "Cấu hình XGBoost được chọn",
             "model_quality_status": "Đánh giá chất lượng mô hình",
+            "model_expected_value": "Mức điểm cơ sở của mô hình",
+            "model_top_feature_effects": "Ba biến ảnh hưởng nhiều nhất đến dự đoán",
+            "feature_effect__tx1_score": "Ảnh hưởng TX1 (điểm)",
+            "feature_effect__tx2_score": "Ảnh hưởng TX2 (điểm)",
+            "feature_effect__midterm_score": "Ảnh hưởng giữa kỳ (điểm)",
+            "feature_effect__absence_percentage": "Ảnh hưởng tỷ lệ nghỉ (điểm)",
+            "feature_effect__lms_learning_percentage": "Ảnh hưởng LMS (điểm)",
+            "feature_effect__interaction_score": "Ảnh hưởng tương tác (điểm)",
+            "feature_effect__stress_score": "Ảnh hưởng stress (điểm)",
+            "feature_effect__motivation_score": "Ảnh hưởng động lực (điểm)",
+            "feature_effect__works_part_time": "Ảnh hưởng đi làm thêm (điểm)",
+            "feature_effect__major": "Ảnh hưởng ngành (điểm)",
+            "feature_effect__course_id": "Ảnh hưởng mã học phần (điểm)",
             "interaction_score": "Mức độ tương tác",
             "stress_score": "Mức độ căng thẳng",
             "motivation_score": "Động lực học tập",
@@ -1749,6 +1764,30 @@ class MainWindow(QMainWindow):
             if metrics.beats_baseline
             else "Chưa vượt baseline dự đoán trung bình"
         )
+        feature_labels = {
+            "tx1_score": "TX1",
+            "tx2_score": "TX2",
+            "midterm_score": "Giữa kỳ",
+            "absence_percentage": "Tỷ lệ nghỉ",
+            "lms_learning_percentage": "LMS",
+            "interaction_score": "Tương tác",
+            "stress_score": "Stress",
+            "motivation_score": "Động lực",
+            "works_part_time": "Đi làm thêm",
+            "major": "Ngành",
+            "course_id": "Mã học phần",
+        }
+        ranked_features = sorted(
+            metrics.feature_effects.items(),
+            key=lambda item: item[1].get("mean_absolute_points", 0.0),
+            reverse=True,
+        )[:6]
+        feature_effect_text = " | ".join(
+            f"{feature_labels.get(feature, feature)}: "
+            f"|tác động| TB {self._format_metric(values.get('mean_absolute_points'))} điểm, "
+            f"trung bình có dấu {float(values.get('mean_signed_points', 0.0)):+.3f}"
+            for feature, values in ranked_features
+        ) or "Chưa đủ dữ liệu kiểm thử để tính mức ảnh hưởng biến."
         self.lbl_training_status.setText(
             f"Đã lưu mô hình {result['version']}. Tập huấn luyện: {result['train_rows']:,} dòng; "
             f"tập kiểm thử: {result['test_rows']:,} dòng. Cấu hình được chọn: {metrics.selected_candidate}."
