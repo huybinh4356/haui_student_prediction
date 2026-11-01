@@ -120,6 +120,8 @@ class PredictionService:
 
     @staticmethod
     def _quality_status(metrics: dict) -> str:
+        if not isinstance(metrics, dict):
+            return "Chưa có đủ chỉ số đánh giá mô hình"
         try:
             model_mae = float(metrics.get("mae", float("nan")))
             baseline_mae = float(metrics.get("baseline_mae", float("nan")))
@@ -249,6 +251,8 @@ class PredictionService:
         results_df["prediction_input_warnings"] = input_warnings
 
         metric_metadata = metadata.get("metrics", {})
+        if not isinstance(metric_metadata, dict):
+            metric_metadata = {}
         model_mae = metric_metadata.get("mae", float("nan"))
         cv_mae = metric_metadata.get("cv_mae_mean", float("nan"))
         baseline_mae = metric_metadata.get("baseline_mae", float("nan"))
