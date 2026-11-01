@@ -30,20 +30,47 @@ def test_missing_absence_raises(service):
         service.evaluate_student_risk(_row(absence_percentage=np.nan))
 
 
-def test_missing_part_time_field_uses_neutral_risk_mapping(service):
+def test_missing_part_time_field_prevents_risk_evaluation(service):
     row = _row().drop(labels=["works_part_time"])
-    result = service.evaluate_student_risk(row)
 
-    assert 0 <= result.weighted_score <= 100
+    issues = service.validate_student_record(row)
+
+    assert any("works_part_time" in issue for issue in issues)
+    with pytest.raises(ValueError, match="works_part_time"):
+        service.evaluate_student_risk(row)
 
 
-def test_part_time_status_uses_neutral_risk_mapping(service):
-    not_working = service.evaluate_student_risk(_row(works_part_time=False))
-    working = service.evaluate_student_risk(_row(works_part_time=True))
-    missing = service.evaluate_student_risk(_row().drop(labels=["works_part_time"]))
+def test_part_time_risk_increases_with_absence_and_low_lms(service):
+    low_risk_working = service.evaluate_student_risk(
+        _row(absence_percentage=5.0, lms_learning_percentage=30.0, works_part_time=True)
+    )
+    low_risk_not_working = service.evaluate_student_risk(
+        _row(absence_percentage=5.0, lms_learning_percentage=30.0, works_part_time=False)
+    )
+    high_risk_working = service.evaluate_student_risk(
+        _row(absence_percentage=20.0, lms_learning_percentage=5.0, works_part_time=True)
+    )
+    high_risk_not_working = service.evaluate_student_risk(
+        _row(absence_percentage=20.0, lms_learning_percentage=5.0, works_part_time=False)
+    )
+
+    low_interaction_delta = low_risk_working.weighted_score - low_risk_not_working.weighted_score
+    high_interaction_delta = high_risk_working.weighted_score - high_risk_not_working.weighted_score
+
+    assert low_interaction_delta == pytest.approx(0.3)
+    assert high_interaction_delta == pytest.approx(1.55)
+    assert high_interaction_delta > low_interaction_delta
+
+
+def test_work_status_does_not_add_risk_when_absence_and_lms_are_good(service):
+    not_working = service.evaluate_student_risk(
+        _row(absence_percentage=0.0, lms_learning_percentage=100.0, works_part_time=False)
+    )
+    working = service.evaluate_student_risk(
+        _row(absence_percentage=0.0, lms_learning_percentage=100.0, works_part_time=True)
+    )
 
     assert working.weighted_score == not_working.weighted_score
-    assert missing.weighted_score == not_working.weighted_score
 
 
 def test_absence_no_override_at_30(service):
@@ -115,12 +142,13 @@ def test_risk_validation_reports_all_missing_required_fields(service):
             "interaction_score",
             "stress_score",
             "motivation_score",
+            "works_part_time",
         ]
     )
 
     issues = service.validate_student_record(row)
 
-    assert len(issues) == 5
+    assert len(issues) == 6
     assert any("absence_percentage" in issue for issue in issues)
     assert any("lms_learning_percentage" in issue for issue in issues)
     assert any("interaction_score" in issue for issue in issues)
