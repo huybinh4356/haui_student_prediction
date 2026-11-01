@@ -215,8 +215,14 @@ def test_train_evaluate_normal(contract):
     model, metrics = train_and_evaluate(df_train, df_test, contract)
     assert metrics.mae >= 0
     assert metrics.rmse >= 0
-    # R² defined for n_test >= 2; may be any real number but must be finite.
     assert np.isfinite(metrics.r2)
+    assert np.isfinite(metrics.cv_mae_mean)
+    assert np.isfinite(metrics.cv_rmse_mean)
+    assert np.isfinite(metrics.baseline_mae)
+    assert metrics.prediction_unique_count >= 1
+    assert metrics.selected_candidate in {"conservative", "balanced", "more_flexible"}
+    assert 0 <= metrics.predicted_min <= metrics.predicted_max <= 10
+    assert 0 <= metrics.actual_min <= metrics.actual_max <= 10
 
 
 def test_train_evaluate_uses_xgboost(contract):
@@ -372,6 +378,49 @@ def test_prediction_service_predicts_when_optional_feature_column_is_absent(regi
     assert result["predicted_final_exam_score"].notna().all()
     assert "works_part_time" not in result.columns
     assert result["course_score_status"].eq("Đã tính").all()
+
+
+def test_prediction_service_rejects_missing_required_score_column(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    service = PredictionService(registry, scoring_service)
+    incomplete = df_test.drop(columns=["tx1_score"])
+
+    with pytest.raises(ValueError, match="tx1_score"):
+        service.predict_student_results(incomplete, "1.0.0", "no_tx2")
+
+
+def test_prediction_service_rejects_required_score_outside_scale(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    service = PredictionService(registry, scoring_service)
+    invalid = _make_test_df(n=5)
+    invalid.loc[invalid.index[0], "tx1_score"] = 10.5
+
+    with pytest.raises(ValueError, match="tx1_score"):
+        service.predict_student_results(invalid, "1.0.0", "no_tx2")
+
+
+def test_prediction_service_reports_missing_optional_features(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    service = PredictionService(registry, scoring_service)
+    incomplete = df_test.drop(columns=["works_part_time"])
+    result = service.predict_student_results(incomplete, "1.0.0", "no_tx2")
+
+    assert result["prediction_input_warnings"].str.contains("works_part_time").all()
+    assert result["model_holdout_mae_reference"].notna().all()
+    assert result["model_cv_mae_reference"].notna().all()
+    assert result["model_quality_status"].notna().all()
 
 
 def test_prediction_service_empty_input_raises(registry, scoring_service, contract):
