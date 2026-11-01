@@ -1729,9 +1729,11 @@ class MainWindow(QMainWindow):
             training_data = load_historical_training_dataset(file_path)
             target = pd.to_numeric(training_data[TARGET_COLUMN], errors="coerce")
             valid_rows = int((target.notna() & np.isfinite(target.astype(float))).sum())
-            if valid_rows < 10:
+            if valid_rows < 13:
                 raise ValueError(
-                    f"Chỉ có {valid_rows} nhãn hợp lệ. Cần ít nhất 10 bản ghi lịch sử để huấn luyện."
+                    f"Chỉ có {valid_rows} nhãn hợp lệ. Cần ít nhất 13 bản ghi lịch sử "
+                    "để giữ lại tập Test độc lập và còn tối thiểu 10 bản ghi Training "
+                    "cho kiểm định chéo 5-fold."
                 )
         except Exception as exc:
             QMessageBox.warning(
@@ -1852,6 +1854,23 @@ class MainWindow(QMainWindow):
         dataframe = self.current_df
         if dataframe is None or dataframe.empty:
             QMessageBox.warning(self, "Chưa có dữ liệu", "Hãy nhập bộ dữ liệu trước khi dự đoán.")
+            return
+
+        from haui_student_prediction.data.column_mapping import is_training_target_column
+
+        historical_labels = [
+            column for column in dataframe.columns
+            if is_training_target_column(column)
+        ]
+        if historical_labels:
+            QMessageBox.warning(
+                self,
+                "Sai loại dữ liệu đầu vào",
+                "Tệp dự đoán chỉ được chứa thông tin sinh viên hiện tại, không chứa điểm cuối kỳ thực tế. "
+                "Hãy xóa các cột nhãn lịch sử sau khỏi tệp dự đoán rồi nhập lại: "
+                + ", ".join(map(str, historical_labels))
+                + ". Tệp có điểm cuối kỳ thực tế chỉ được chọn riêng trong bước huấn luyện mô hình.",
+            )
             return
         if "tx2_score" in dataframe.columns:
             tx2_values = pd.to_numeric(dataframe["tx2_score"], errors="coerce")
