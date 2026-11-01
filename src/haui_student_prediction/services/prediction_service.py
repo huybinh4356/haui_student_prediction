@@ -107,7 +107,11 @@ class PredictionService:
 
         return pd.Series(
             {
-                index: "; ".join(row_warnings) if row_warnings else "Đầy đủ các trường đặc trưng đã khai báo"
+                index: (
+                    "; ".join(row_warnings)
+                    if row_warnings
+                    else "Đầy đủ các trường đặc trưng đã khai báo"
+                )
                 for index, row_warnings in warnings_by_row.items()
             },
             index=records.index,
@@ -169,7 +173,8 @@ class PredictionService:
         if profile.has_tx2:
             if "tx2_score" not in prediction_input.columns:
                 raise ValueError(
-                    "The selected course profile requires TX2, but the input has no tx2_score column."
+                    "The selected course profile requires TX2, "
+                    "but the input has no tx2_score column."
                 )
             required_score_fields.add("tx2_score")
         elif "tx2_score" in prediction_input.columns:
