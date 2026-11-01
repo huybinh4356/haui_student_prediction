@@ -365,7 +365,9 @@ def test_prediction_service_predict_normal(registry, scoring_service, contract):
     assert result["predicted_final_exam_score"].notna().all()
 
 
-def test_prediction_service_predicts_when_optional_feature_column_is_absent(registry, scoring_service, contract):
+def test_prediction_service_predicts_when_optional_feature_column_is_absent(
+    registry, scoring_service, contract,
+):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
@@ -391,7 +393,9 @@ def test_training_uses_group_cross_validation_for_repeated_students(contract):
     assert metrics.cv_strategy == "GroupKFold"
 
 
-def test_prediction_service_rejects_missing_required_score_column(registry, scoring_service, contract):
+def test_prediction_service_rejects_missing_required_score_column(
+    registry, scoring_service, contract,
+):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
@@ -404,7 +408,9 @@ def test_prediction_service_rejects_missing_required_score_column(registry, scor
         service.predict_student_results(incomplete, "1.0.0", "no_tx2")
 
 
-def test_prediction_service_rejects_required_score_outside_scale(registry, scoring_service, contract):
+def test_prediction_service_rejects_required_score_outside_scale(
+    registry, scoring_service, contract,
+):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
@@ -564,7 +570,9 @@ def test_registry_creates_missing_parent_directories(tmp_path):
     assert artifacts_path.is_dir()
 
 
-def test_prediction_service_rejects_tx2_when_no_tx2_profile_is_selected(registry, scoring_service, contract):
+def test_prediction_service_rejects_tx2_when_no_tx2_profile_is_selected(
+    registry, scoring_service, contract,
+):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
