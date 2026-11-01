@@ -92,11 +92,15 @@ Prediction data and model-training data are separate.
 3. Choose a separate historical CSV/Excel file containing a final-exam label. The loader converts that historical label to `target_final_exam_score`; it is used only as the supervised-learning target.
 4. The XGBoost pipeline learns from available pre-exam features such as TX1/TX2, midterm, absence, LMS participation, interaction, stress, motivation, work status, major, and course ID when supported by the data.
 5. Before training, TX1 and midterm values are required, must have at least two distinct values, and may have at most 20% missing cells. Scores and percentages are checked against their configured scales. The system selects among three XGBoost configurations using five-fold cross-validation inside the Training partition, then evaluates the selected configuration on the untouched held-out Test partition. It reports Test MAE/RMSE/R², cross-validation MAE, a mean-prediction DummyRegressor baseline, and actual-versus-predicted score distributions before registering the model.
-6. For current students, the system predicts the final-exam score, calculates the expected course total using the configured assessment profile, and evaluates academic risk.
+6. For current students, import a separate prediction file with no actual final-exam label. The trained model predicts the final-exam score, calculates the expected course total using the configured assessment profile, and evaluates academic risk.
 
 The historical label must never be used as an input feature or included in the current prediction dataset. The amount and diversity of real historical data affect model reliability.
 
 The prediction service also validates required TX1/midterm/TX2 fields, numeric ranges and finite values. Missing optional model features are reported on each output row when the trained pipeline imputes them. Predictions outside 0–10 or non-finite predictions are rejected rather than clipped. The active model version is bumped after the pipeline change, so an existing older model must be retrained before prediction.
+
+The prediction file and historical training file have distinct roles. The prediction file is imported through **Dữ liệu sinh viên** and contains current student features without a real final-exam label. The historical file is selected separately through **Chọn dữ liệu lịch sử & huấn luyện XGBoost** and is used only to fit and evaluate the model. Variables absent or constant in the historical file cannot be learned, even when those columns exist in the current prediction file; the training report lists those excluded variables.
+
+XGBoost configurations are compared using five-fold validation and the best configuration is selected by validation MAE. The model report uses XGBoost TreeSHAP contributions to show how each feature raises or lowers each individual predicted score relative to the model's baseline value. Output columns named `feature_effect__<feature>` contain point contributions; their sum plus `model_expected_value` reconstructs `predicted_final_exam_score` (within floating-point tolerance). Positive contributions raise the prediction and negative contributions lower it. These are model explanations, not causal effects or fixed grading weights.
 
 ### UCI benchmark training (separate experimental workflow)
 
