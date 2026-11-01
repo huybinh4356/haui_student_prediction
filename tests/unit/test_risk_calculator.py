@@ -3,10 +3,10 @@ import pytest
 from haui_student_prediction.risk.risk_calculator import RiskCalculator
 
 
-def _calculate(calc, absence):
+def _calculate(calc, absence, lms=100.0, works_part_time=False):
     return calc.calculate_risk(
         absence_pct=absence,
-        lms_pct=100.0,
+        lms_pct=lms,
         predicted_course_score=10.0,
         interaction=5.0,
         interaction_max=5.0,
@@ -14,7 +14,7 @@ def _calculate(calc, absence):
         stress_max=5.0,
         motivation=5.0,
         motivation_max=5.0,
-        work_risk_points=50.0,
+        works_part_time=works_part_time,
     )
 
 
@@ -55,6 +55,7 @@ def test_non_finite_component_is_rejected():
             stress_max=5.0,
             motivation=4.0,
             motivation_max=5.0,
+            works_part_time=False,
         )
 
 
@@ -71,6 +72,7 @@ def test_zero_survey_scale_maximum_is_rejected():
             stress_max=5.0,
             motivation=4.0,
             motivation_max=5.0,
+            works_part_time=False,
         )
 
 
@@ -79,3 +81,19 @@ def test_invalid_risk_weights_are_rejected():
     calc.weights["absence"] = float("nan")
     with pytest.raises(ValueError, match="finite and non-negative"):
         _calculate(calc, 10.0)
+
+
+def test_work_risk_is_an_interaction_of_employment_absence_and_lms():
+    calc = RiskCalculator()
+
+    low_working = _calculate(calc, 5.0, lms=30.0, works_part_time=True)
+    low_not_working = _calculate(calc, 5.0, lms=30.0, works_part_time=False)
+    high_working = _calculate(calc, 20.0, lms=5.0, works_part_time=True)
+    high_not_working = _calculate(calc, 20.0, lms=5.0, works_part_time=False)
+
+    low_interaction_delta = low_working.weighted_score - low_not_working.weighted_score
+    high_interaction_delta = high_working.weighted_score - high_not_working.weighted_score
+
+    assert low_interaction_delta == pytest.approx(0.3)
+    assert high_interaction_delta == pytest.approx(1.55)
+    assert high_interaction_delta > low_interaction_delta
