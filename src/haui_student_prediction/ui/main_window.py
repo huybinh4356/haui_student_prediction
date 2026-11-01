@@ -98,9 +98,11 @@ class _TrainingWorker(QThread):
             data = data.loc[finite_target].copy()
             data[target_column] = target.loc[finite_target].astype(float)
 
-            if len(data) < 10:
+            if len(data) < 13:
                 raise ValueError(
-                    f"Chỉ có {len(data)} bản ghi huấn luyện hợp lệ. Cần tối thiểu 10 bản ghi để có thể chia tập huấn luyện và kiểm thử sơ bộ."
+                    f"Chỉ có {len(data)} bản ghi huấn luyện hợp lệ. Cần tối thiểu 13 bản ghi "
+                    "để tạo tập Test độc lập và có ít nhất 10 bản ghi trong tập Training "
+                    "cho 5-fold Cross-validation."
                 )
 
             numeric_candidates = [
@@ -1725,11 +1727,31 @@ class MainWindow(QMainWindow):
         mae = self._format_metric(metrics.mae)
         rmse = self._format_metric(metrics.rmse)
         r2 = self._format_metric(metrics.r2)
+        cv_mae = self._format_metric(metrics.cv_mae_mean)
+        cv_mae_std = self._format_metric(metrics.cv_mae_std)
+        baseline_mae = self._format_metric(metrics.baseline_mae)
+        spread_ratio = self._format_metric(metrics.prediction_spread_ratio)
+        actual_range = (
+            f"{self._format_metric(metrics.actual_min)}–{self._format_metric(metrics.actual_max)}"
+        )
+        predicted_range = (
+            f"{self._format_metric(metrics.predicted_min)}–{self._format_metric(metrics.predicted_max)}"
+        )
+        baseline_status = (
+            "Tốt hơn hoặc bằng baseline"
+            if metrics.beats_baseline
+            else "Chưa vượt baseline dự đoán trung bình"
+        )
         self.lbl_training_status.setText(
-            f"Đã lưu mô hình {result['version']}. Tập huấn luyện: {result['train_rows']:,} dòng; tập kiểm thử: {result['test_rows']:,} dòng."
+            f"Đã lưu mô hình {result['version']}. Tập huấn luyện: {result['train_rows']:,} dòng; "
+            f"tập kiểm thử: {result['test_rows']:,} dòng. Cấu hình được chọn: {metrics.selected_candidate}."
         )
         self.lbl_model_metrics.setText(
-            f"MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
+            f"Test MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
+            f"5-fold CV MAE: {cv_mae} ± {cv_mae_std}    Baseline MAE: {baseline_mae}\n"
+            f"Khoảng điểm thực tế: {actual_range}    Khoảng dự đoán: {predicted_range}\n"
+            f"Std dự đoán / Std thực tế: {spread_ratio}    Số điểm dự đoán khác nhau: {metrics.prediction_unique_count}\n"
+            f"Đánh giá: {baseline_status}\n"
             f"Số đặc trưng: {result['feature_count']}\n"
             f"Mã nhận diện bộ dữ liệu: {result['dataset_hash']}\n"
             f"Các đặc trưng: {', '.join(result['features'])}"
@@ -1739,7 +1761,13 @@ class MainWindow(QMainWindow):
         QMessageBox.information(
             self,
             "Huấn luyện hoàn tất",
-            f"Mô hình {result['version']} đã được lưu và xác minh trong kho mô hình.\n\nMAE: {mae}\nRMSE: {rmse}\nR²: {r2}",
+            f"Mô hình {result['version']} đã được lưu và xác minh trong kho mô hình.\n\n"
+            f"Test MAE: {mae}\nRMSE: {rmse}\nR²: {r2}\n"
+            f"5-fold CV MAE: {cv_mae} ± {cv_mae_std}\n"
+            f"Baseline MAE: {baseline_mae}\n"
+            f"Std dự đoán / Std thực tế: {spread_ratio}\n"
+            f"{baseline_status}\n"
+            "Các chỉ số Test là kết quả trên tập kiểm thử giữ riêng; cần dùng dữ liệu HaUI thực tế đủ đa dạng để xác nhận chất lượng.",
         )
 
     def _on_training_failed(self, message: str) -> None:
