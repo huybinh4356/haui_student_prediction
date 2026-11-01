@@ -1748,7 +1748,7 @@ class MainWindow(QMainWindow):
         )
         self.lbl_model_metrics.setText(
             f"Test MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
-            f"5-fold CV MAE: {cv_mae} ± {cv_mae_std}    Baseline MAE: {baseline_mae}\n"
+            f"5-fold {metrics.cv_strategy} MAE: {cv_mae} ± {cv_mae_std}    Baseline MAE: {baseline_mae}\n"
             f"Khoảng điểm thực tế: {actual_range}    Khoảng dự đoán: {predicted_range}\n"
             f"Std dự đoán / Std thực tế: {spread_ratio}    Số điểm dự đoán khác nhau: {metrics.prediction_unique_count}\n"
             f"Đánh giá: {baseline_status}\n"
@@ -1763,7 +1763,7 @@ class MainWindow(QMainWindow):
             "Huấn luyện hoàn tất",
             f"Mô hình {result['version']} đã được lưu và xác minh trong kho mô hình.\n\n"
             f"Test MAE: {mae}\nRMSE: {rmse}\nR²: {r2}\n"
-            f"5-fold CV MAE: {cv_mae} ± {cv_mae_std}\n"
+            f"5-fold {metrics.cv_strategy} MAE: {cv_mae} ± {cv_mae_std}\n"
             f"Baseline MAE: {baseline_mae}\n"
             f"Std dự đoán / Std thực tế: {spread_ratio}\n"
             f"{baseline_status}\n"
