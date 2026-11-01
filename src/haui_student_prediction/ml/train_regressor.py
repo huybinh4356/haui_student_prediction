@@ -30,6 +30,7 @@ class ModelMetrics:
     prediction_unique_count: int = 0
     beats_baseline: bool = False
     selected_candidate: str = ""
+    cv_strategy: str = "KFold"
 
 
 def train_and_evaluate(
