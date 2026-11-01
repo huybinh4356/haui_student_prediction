@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Tuple
 
 import pandas as pd
@@ -31,6 +31,7 @@ class ModelMetrics:
     beats_baseline: bool = False
     selected_candidate: str = ""
     cv_strategy: str = "KFold"
+    feature_effects: dict[str, dict[str, float]] = field(default_factory=dict)
 
 
 def train_and_evaluate(
