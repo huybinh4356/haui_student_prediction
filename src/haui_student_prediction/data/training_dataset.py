@@ -12,6 +12,8 @@ from haui_student_prediction.data.validator import DataValidator
 
 
 TARGET_COLUMN = "target_final_exam_score"
+REQUIRED_TRAINING_FEATURES = ("tx1_score", "midterm_score")
+MAX_REQUIRED_FEATURE_MISSING_RATE = 0.20
 
 
 def _read_dataset(path: Path) -> pd.DataFrame:
@@ -24,6 +26,39 @@ def _read_dataset(path: Path) -> pd.DataFrame:
     if suffix in {".xls", ".xlsx"}:
         return pd.read_excel(path)
     raise ValueError(f"Định dạng tệp không được hỗ trợ: {suffix}")
+
+
+def _validate_required_training_features(dataframe: pd.DataFrame) -> None:
+    labels = {
+        "tx1_score": "Điểm TX1",
+        "midterm_score": "Điểm giữa kỳ",
+    }
+    for column in REQUIRED_TRAINING_FEATURES:
+        label = labels[column]
+        if column not in dataframe.columns:
+            raise ValueError(
+                f"Dữ liệu lịch sử thiếu trường bắt buộc {label} ({column})."
+            )
+
+        values = pd.to_numeric(dataframe[column], errors="coerce")
+        finite_mask = pd.Series(
+            np.isfinite(values.to_numpy(dtype=float, na_value=np.nan)),
+            index=dataframe.index,
+        )
+        missing_rate = float((~finite_mask).mean())
+        if missing_rate > MAX_REQUIRED_FEATURE_MISSING_RATE:
+            raise ValueError(
+                f"{label} bị thiếu {missing_rate:.1%} dữ liệu; "
+                f"mức tối đa cho phép là {MAX_REQUIRED_FEATURE_MISSING_RATE:.0%}. "
+                "Hãy bổ sung dữ liệu trước khi huấn luyện."
+            )
+
+        distinct_values = int(values.loc[finite_mask].nunique(dropna=True))
+        if distinct_values < 2:
+            raise ValueError(
+                f"{label} không có đủ độ biến thiên. "
+                "Cần ít nhất hai giá trị khác nhau trong dữ liệu lịch sử."
+            )
 
 
 def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
@@ -95,4 +130,5 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
             "nhiều dữ liệu đa dạng hơn thường giúp đánh giá mô hình đáng tin cậy hơn."
         )
 
+    _validate_required_training_features(feature_data)
     return feature_data.reset_index(drop=True)
