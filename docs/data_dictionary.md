@@ -48,7 +48,7 @@
 | interaction_score | float/ordinal | 1-5; higher = better interaction |
 | stress_score | float/ordinal | 1-5; higher = more stress |
 | motivation_score | float/ordinal | 1-5; higher = more motivation |
-| works_part_time | boolean | Direction of effect unconfirmed; neutral mapping |
+| works_part_time | boolean | Required for risk evaluation; working alone does not add risk, the interaction contribution depends on absence and LMS risk |
 | survey_timestamp | datetime | Must precede prediction snapshot |
 
 ## System Fields
@@ -64,9 +64,9 @@
 - Percentages `absence_percentage` and `lms_learning_percentage` must be within 0-100.
 - Academic scores `tx1_score`, `tx2_score`, `midterm_score`, and the historical target `target_final_exam_score` must be within 0-10.
 - Survey fields `interaction_score`, `stress_score`, and `motivation_score` must be within 1-5.
-- Risk evaluation requires absence percentage, LMS percentage, interaction, stress, motivation, and a calculated `predicted_course_score` within 0-10.
+- Risk evaluation requires absence percentage, LMS percentage, interaction, stress, motivation, a known `works_part_time` value, and a calculated `predicted_course_score` within 0-10.
 - Missing risk inputs do not block a valid grade prediction. The affected record is marked as not evaluated for risk and lists the missing fields. Values outside the configured ranges are rejected during import or historical training. The system never fills missing risk values with invented values.
-- `works_part_time` remains optional in the risk engine and currently uses a neutral contribution until its effect is supported by evidence.
+- `works_part_time` is required to evaluate the work-study interaction. If it is missing or unknown, risk is not evaluated for that record; the final-exam prediction can still continue.
 
 ## UCI benchmark-only fields
 

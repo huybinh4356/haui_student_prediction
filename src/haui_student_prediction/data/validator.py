@@ -21,6 +21,7 @@ RISK_REQUIRED_INPUTS = (
     "interaction_score",
     "stress_score",
     "motivation_score",
+    "works_part_time",
 )
 
 FIELD_LABELS = {
@@ -34,6 +35,7 @@ FIELD_LABELS = {
     "interaction_score": "Mức độ tương tác",
     "stress_score": "Mức độ căng thẳng",
     "motivation_score": "Động lực học tập",
+    "works_part_time": "Tình trạng làm thêm",
 }
 
 

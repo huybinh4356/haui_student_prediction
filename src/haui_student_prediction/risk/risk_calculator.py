@@ -77,7 +77,7 @@ class RiskCalculator:
         stress_max: float,
         motivation: float,
         motivation_max: float,
-        work_risk_points: float = 50.0
+        works_part_time: bool,
     ) -> RiskResult:
         inputs = {
             "absence_pct": absence_pct,
@@ -89,7 +89,6 @@ class RiskCalculator:
             "stress_max": stress_max,
             "motivation": motivation,
             "motivation_max": motivation_max,
-            "work_risk_points": work_risk_points,
         }
         for name, value in inputs.items():
             try:
@@ -109,15 +108,14 @@ class RiskCalculator:
         stress_max = inputs["stress_max"]
         motivation = inputs["motivation"]
         motivation_max = inputs["motivation_max"]
-        work_risk_points = inputs["work_risk_points"]
+
+        if not isinstance(works_part_time, bool):
+            raise ValueError("works_part_time must be a boolean")
 
         if not (0 <= absence_pct <= 100 and 0 <= lms_pct <= 100):
             raise ValueError("Percentages must be within 0 and 100")
         if interaction_max <= 0 or stress_max <= 0 or motivation_max <= 0:
             raise ValueError("Survey scale maxima must be greater than zero")
-        if not 0 <= work_risk_points <= 100:
-            raise ValueError("work_risk_points must be within 0 and 100")
-
         if any(not math.isfinite(float(weight)) or float(weight) < 0 for weight in self.weights.values()):
             raise ValueError("Risk weights must be finite and non-negative")
         if abs(sum(float(weight) for weight in self.weights.values()) - 1.0) > 1e-6:
@@ -125,6 +123,9 @@ class RiskCalculator:
 
         absence_risk, status = self._normalize_absence(absence_pct)
         lms_risk = self._normalize_lms(lms_pct)
+        work_risk_points = (
+            (absence_risk + lms_risk) / 2.0 if works_part_time else 0.0
+        )
         acad_risk = self._normalize_academic(predicted_course_score)
         int_risk = self._normalize_interaction(interaction, interaction_max)
         stress_risk = self._normalize_stress(stress, stress_max)
