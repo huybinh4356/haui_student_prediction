@@ -46,6 +46,15 @@ class RiskPredictionService:
                     f"{minimum:g}–{maximum:g}, hiện tại là {number:g}"
                 )
 
+        if "works_part_time" not in student_record.index:
+            issues.append("Tình trạng làm thêm (works_part_time): thiếu cột")
+        else:
+            work_value = student_record.get("works_part_time")
+            if work_value is None or pd.isna(work_value):
+                issues.append("Tình trạng làm thêm (works_part_time): chưa có dữ liệu")
+            elif not isinstance(work_value, (bool, np.bool_)):
+                issues.append("Tình trạng làm thêm (works_part_time): phải là giá trị Có/Không")
+
         return issues
 
     def evaluate_student_risk(self, student_record: pd.Series) -> RiskResult:
@@ -61,6 +70,7 @@ class RiskPredictionService:
         interaction = self._require_float(student_record, "interaction_score")
         stress = self._require_float(student_record, "stress_score")
         motivation = self._require_float(student_record, "motivation_score")
+        works_part_time = bool(student_record.get("works_part_time"))
 
         return self.calculator.calculate_risk(
             absence_pct=absence,
@@ -72,7 +82,7 @@ class RiskPredictionService:
             stress_max=5.0,
             motivation=motivation,
             motivation_max=5.0,
-            work_risk_points=50.0,
+            works_part_time=works_part_time,
         )
 
     def _require_float(self, row: pd.Series, col: str) -> float:
