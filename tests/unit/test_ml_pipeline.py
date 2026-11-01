@@ -13,11 +13,11 @@ from haui_student_prediction.features.feature_contract import (
     IDENTIFIER_COLUMNS,
 )
 from haui_student_prediction.features.feature_builder import FeatureBuilder
-from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
 from haui_student_prediction.ml.model_explainability import tree_feature_contributions
-from haui_student_prediction.ml.xgboost_regressor import _new_pipeline
-from haui_student_prediction.ml.train_regressor import train_and_evaluate
 from haui_student_prediction.ml.model_registry import ModelRegistry
+from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
+from haui_student_prediction.ml.train_regressor import train_and_evaluate
+from haui_student_prediction.ml.xgboost_regressor import _new_pipeline
 from haui_student_prediction.scoring.final_course_score import (
     CourseProfile,
     ScoringService,
