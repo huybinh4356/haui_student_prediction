@@ -4,6 +4,7 @@ import pandas as pd
 from haui_student_prediction.data.column_mapping import is_training_target_column
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
+from haui_student_prediction.ml.model_explainability import tree_feature_contributions
 from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION, ModelRegistry
 from haui_student_prediction.scoring.final_course_score import ScoringService
 
@@ -226,6 +227,11 @@ class PredictionService:
         if isinstance(raw_predictions, tuple):
             raw_predictions = raw_predictions[0]
         predictions = np.asarray(raw_predictions, dtype=float).reshape(-1)
+        local_contributions = tree_feature_contributions(
+            model,
+            X_infer,
+            contract.get_all_features(),
+        )
 
         if len(predictions) != len(prediction_input):
             raise RuntimeError(
@@ -249,6 +255,39 @@ class PredictionService:
         results_df = prediction_input.copy()
         results_df["predicted_final_exam_score"] = predictions
         results_df["prediction_input_warnings"] = input_warnings
+        results_df["model_expected_value"] = local_contributions["__baseline__"]
+
+        for feature in contract.get_all_features():
+            results_df[f"feature_effect__{feature}"] = local_contributions[feature]
+
+        feature_labels = {
+            "tx1_score": "TX1",
+            "tx2_score": "TX2",
+            "midterm_score": "Giữa kỳ",
+            "absence_percentage": "Tỷ lệ nghỉ",
+            "lms_learning_percentage": "LMS",
+            "interaction_score": "Tương tác",
+            "stress_score": "Stress",
+            "motivation_score": "Động lực",
+            "works_part_time": "Đi làm thêm",
+            "major": "Ngành",
+            "course_id": "Mã học phần",
+        }
+        local_effect_summaries = []
+        for _, contribution_row in local_contributions.iterrows():
+            ranked_effects = sorted(
+                contract.get_all_features(),
+                key=lambda feature: abs(float(contribution_row[feature])),
+                reverse=True,
+            )[:3]
+            local_effect_summaries.append(
+                "; ".join(
+                    f"{feature_labels.get(feature, feature)}: "
+                    f"{float(contribution_row[feature]):+.3f} điểm"
+                    for feature in ranked_effects
+                )
+            )
+        results_df["model_top_feature_effects"] = local_effect_summaries
 
         metric_metadata = metadata.get("metrics", {})
         if not isinstance(metric_metadata, dict):
