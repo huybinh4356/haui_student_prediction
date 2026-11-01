@@ -14,6 +14,8 @@ from haui_student_prediction.features.feature_contract import (
 )
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
+from haui_student_prediction.ml.model_explainability import tree_feature_contributions
+from haui_student_prediction.ml.xgboost_regressor import _new_pipeline
 from haui_student_prediction.ml.train_regressor import train_and_evaluate
 from haui_student_prediction.ml.model_registry import ModelRegistry
 from haui_student_prediction.scoring.final_course_score import (
@@ -226,6 +228,43 @@ def test_train_evaluate_normal(contract):
     assert 0 <= metrics.actual_min <= metrics.actual_max <= 10
 
 
+def test_tree_feature_contributions_reconstruct_predictions(contract):
+    dataframe = _make_train_df(n=40)
+    builder = FeatureBuilder(contract)
+    X = builder.extract_features(dataframe, is_training=True)
+    y = dataframe[TARGET]
+
+    model = _new_pipeline(
+        contract,
+        {
+            "n_estimators": 40,
+            "learning_rate": 0.05,
+            "max_depth": 2,
+            "min_child_weight": 1,
+        },
+    )
+    model.fit(X, y)
+
+    contributions = tree_feature_contributions(
+        model,
+        X,
+        contract.get_all_features(),
+    )
+    predictions = model.predict(X)
+    reconstructed = (
+        contributions[contract.get_all_features()].sum(axis=1)
+        + contributions["__baseline__"]
+    )
+
+    assert np.allclose(
+        reconstructed.to_numpy(dtype=float),
+        np.asarray(predictions, dtype=float),
+        atol=1e-4,
+    )
+    assert contributions["tx1_score"].abs().sum() > 0
+    assert contributions["midterm_score"].abs().sum() > 0
+
+
 def test_train_evaluate_uses_xgboost(contract):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
@@ -363,6 +402,16 @@ def test_prediction_service_predict_normal(registry, scoring_service, contract):
     assert len(result) == 5
     # Predicted scores must be finite numbers
     assert result["predicted_final_exam_score"].notna().all()
+    effect_columns = [f"feature_effect__{feature}" for feature in contract.get_all_features()]
+    assert all(column in result.columns for column in effect_columns)
+    assert "model_expected_value" in result.columns
+    reconstructed = result["model_expected_value"] + result[effect_columns].sum(axis=1)
+    assert np.allclose(
+        reconstructed.to_numpy(dtype=float),
+        result["predicted_final_exam_score"].to_numpy(dtype=float),
+        atol=1e-4,
+    )
+    assert result["model_top_feature_effects"].notna().all()
 
 
 def test_prediction_service_predicts_when_optional_feature_column_is_absent(
