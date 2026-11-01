@@ -220,6 +220,7 @@ def test_train_evaluate_normal(contract):
     assert np.isfinite(metrics.cv_rmse_mean)
     assert np.isfinite(metrics.baseline_mae)
     assert metrics.prediction_unique_count >= 1
+    assert metrics.cv_strategy == "KFold"
     assert metrics.selected_candidate in {"conservative", "balanced", "more_flexible"}
     assert 0 <= metrics.predicted_min <= metrics.predicted_max <= 10
     assert 0 <= metrics.actual_min <= metrics.actual_max <= 10
@@ -378,6 +379,16 @@ def test_prediction_service_predicts_when_optional_feature_column_is_absent(regi
     assert result["predicted_final_exam_score"].notna().all()
     assert "works_part_time" not in result.columns
     assert result["course_score_status"].eq("Đã tính").all()
+
+
+def test_training_uses_group_cross_validation_for_repeated_students(contract):
+    df_train = _make_train_df(n=20)
+    df_train["student_id"] = [f"SV{index // 4:02d}" for index in range(len(df_train))]
+    df_test = _make_test_df(n=5)
+
+    _, metrics = train_and_evaluate(df_train, df_test, contract)
+
+    assert metrics.cv_strategy == "GroupKFold"
 
 
 def test_prediction_service_rejects_missing_required_score_column(registry, scoring_service, contract):
