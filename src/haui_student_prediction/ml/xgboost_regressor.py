@@ -10,6 +10,7 @@ from xgboost import XGBRegressor
 
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
+from haui_student_prediction.ml.model_explainability import tree_feature_contributions
 from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
 from haui_student_prediction.ml.preprocessing import build_preprocessing_pipeline
 from haui_student_prediction.ml.train_regressor import ModelMetrics
@@ -26,6 +27,14 @@ CANDIDATE_CONFIGS = {
         "reg_alpha": 0.1,
         "reg_lambda": 5.0,
     },
+    "shallow_more_trees": {
+        "n_estimators": 360,
+        "learning_rate": 0.025,
+        "max_depth": 2,
+        "min_child_weight": 1,
+        "reg_alpha": 0.0,
+        "reg_lambda": 3.0,
+    },
     "balanced": {
         "n_estimators": 250,
         "learning_rate": 0.03,
@@ -34,6 +43,15 @@ CANDIDATE_CONFIGS = {
         "reg_alpha": 0.05,
         "reg_lambda": 2.0,
     },
+    "regularized_depth3": {
+        "n_estimators": 240,
+        "learning_rate": 0.04,
+        "max_depth": 3,
+        "min_child_weight": 4,
+        "gamma": 0.05,
+        "reg_alpha": 0.2,
+        "reg_lambda": 8.0,
+    },
     "more_flexible": {
         "n_estimators": 300,
         "learning_rate": 0.04,
@@ -41,6 +59,14 @@ CANDIDATE_CONFIGS = {
         "min_child_weight": 1,
         "reg_alpha": 0.0,
         "reg_lambda": 2.0,
+    },
+    "faster_learning": {
+        "n_estimators": 180,
+        "learning_rate": 0.06,
+        "max_depth": 3,
+        "min_child_weight": 2,
+        "reg_alpha": 0.05,
+        "reg_lambda": 3.0,
     },
 }
 
@@ -174,6 +200,20 @@ def _cross_validate_candidates(
     return best[0], best[1], best[2], cv_strategy
 
 
+def _summarize_feature_effects(
+    contributions: pd.DataFrame,
+    feature_names: list[str],
+) -> dict[str, dict[str, float]]:
+    summaries = {}
+    for feature in feature_names:
+        values = contributions[feature].to_numpy(dtype=float)
+        summaries[feature] = {
+            "mean_absolute_points": float(np.mean(np.abs(values))),
+            "mean_signed_points": float(np.mean(values)),
+        }
+    return summaries
+
+
 def train_xgboost_and_evaluate(
     df_train: pd.DataFrame,
     df_test: pd.DataFrame,
@@ -243,6 +283,16 @@ def train_xgboost_and_evaluate(
     baseline_mae = float(mean_absolute_error(y_test, baseline_predictions))
     mae = float(mean_absolute_error(y_test, predictions))
 
+    test_contributions = tree_feature_contributions(
+        evaluation_model,
+        X_test,
+        contract.get_all_features(),
+    )
+    feature_effects = _summarize_feature_effects(
+        test_contributions,
+        contract.get_all_features(),
+    )
+
     metrics = ModelMetrics(
         mae=mae,
         rmse=float(np.sqrt(mean_squared_error(y_test, predictions))),
@@ -263,6 +313,7 @@ def train_xgboost_and_evaluate(
         beats_baseline=bool(mae <= baseline_mae),
         selected_candidate=selected_name,
         cv_strategy=cv_strategy,
+        feature_effects=feature_effects,
     )
 
     full_data = pd.concat([train_data, test_data], axis=0)
