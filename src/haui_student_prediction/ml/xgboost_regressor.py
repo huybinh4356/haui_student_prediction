@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import KFold, cross_validate
+from sklearn.model_selection import GroupKFold, KFold, cross_validate
 from sklearn.pipeline import Pipeline
 from xgboost import XGBRegressor
 
@@ -104,14 +104,36 @@ def _cross_validate_candidates(
     X_train: pd.DataFrame,
     y_train: pd.Series,
     contract: FeatureContract,
-) -> tuple[str, dict, dict[str, float]]:
+    groups: pd.Series | None = None,
+) -> tuple[str, dict, dict[str, float], str]:
     if len(X_train) < 10:
         raise ValueError(
             "Cần ít nhất 10 bản ghi trong tập Training để thực hiện 5-fold "
             "Cross-validation. Hãy bổ sung dữ liệu lịch sử."
         )
 
-    splitter = KFold(n_splits=5, shuffle=True, random_state=42)
+    group_values = None
+    has_repeated_students = False
+    if groups is not None:
+        normalized_groups = groups.astype("string").str.strip().str.casefold()
+        has_repeated_students = normalized_groups.notna().all() and normalized_groups.ne("").all() and normalized_groups.duplicated().any()
+
+    if has_repeated_students:
+        unique_groups = int(normalized_groups.nunique())
+        if unique_groups < 5:
+            raise ValueError(
+                "Dữ liệu có sinh viên xuất hiện nhiều lần nhưng chỉ có "
+                f"{unique_groups} mã sinh viên duy nhất. Cần ít nhất 5 nhóm "
+                "sinh viên để Cross-validation không đưa cùng sinh viên vào "
+                "cả phần huấn luyện và xác thực."
+            )
+        splitter = GroupKFold(n_splits=5)
+        group_values = normalized_groups.to_numpy()
+        cv_strategy = "GroupKFold"
+    else:
+        splitter = KFold(n_splits=5, shuffle=True, random_state=42)
+        cv_strategy = "KFold"
+
     scoring = {
         "mae": "neg_mean_absolute_error",
         "rmse": "neg_root_mean_squared_error",
@@ -125,6 +147,7 @@ def _cross_validate_candidates(
             X_train,
             y_train,
             cv=splitter,
+            groups=group_values,
             scoring=scoring,
             n_jobs=1,
             return_train_score=False,
@@ -144,7 +167,7 @@ def _cross_validate_candidates(
         candidate_results,
         key=lambda item: (item[2]["cv_mae_mean"], item[2]["cv_rmse_mean"]),
     )
-    return best
+    return best[0], best[1], best[2], cv_strategy
 
 
 def train_xgboost_and_evaluate(
@@ -165,10 +188,16 @@ def train_xgboost_and_evaluate(
     X_train = builder.extract_features(train_data, is_training=True)
     y_train = train_data[target_column]
 
-    selected_name, selected_parameters, cv_metrics = _cross_validate_candidates(
+    training_groups = (
+        train_data["student_id"]
+        if "student_id" in train_data.columns
+        else None
+    )
+    selected_name, selected_parameters, cv_metrics, cv_strategy = _cross_validate_candidates(
         X_train,
         y_train,
         contract,
+        groups=training_groups,
     )
     evaluation_model = _new_pipeline(contract, selected_parameters)
     evaluation_model.fit(X_train, y_train)
@@ -183,6 +212,7 @@ def train_xgboost_and_evaluate(
             r2=float("nan"),
             **cv_metrics,
             selected_candidate=selected_name,
+            cv_strategy=cv_strategy,
         )
         return evaluation_model, metrics
 
@@ -228,6 +258,7 @@ def train_xgboost_and_evaluate(
         prediction_unique_count=int(np.unique(np.round(predictions, decimals=8)).size),
         beats_baseline=bool(mae <= baseline_mae),
         selected_candidate=selected_name,
+        cv_strategy=cv_strategy,
     )
 
     full_data = pd.concat([train_data, test_data], axis=0)
