@@ -24,9 +24,19 @@ At exactly 30%, the attendance override does not trigger. Above 30%, the overrid
 | Academic score | 8% | Lower score = higher risk |
 | LMS participation | 8% | Lower LMS = higher risk |
 | Interaction | 4% | Lower interaction = higher risk |
-| Work part-time | 2% | Neutral (unconfirmed direction; 50 risk points for either status) |
+| Work part-time | 2% | Interaction term: no extra risk when not working; when working, higher absence risk and lower LMS participation increase this component |
 | Stress | 1.5% | Higher stress = higher risk (to confirm) |
 | Motivation | 1.5% | Lower motivation = higher risk (to confirm) |
+
+## Work and study interaction
+
+Part-time work is not treated as a risk by itself. The work component represents the additional interaction between working while attendance and LMS participation are weak:
+
+- If `works_part_time` is `False`, `work_risk_points = 0`.
+- If `works_part_time` is `True`, `work_risk_points = (absence_risk_points + lms_risk_points) / 2`.
+- The existing absence and LMS normalization rules are reused. No new LMS threshold is introduced.
+- The work component remains weighted at 2%; all other component weights remain unchanged.
+- This is an explicit interaction term: it adds a limited conditional contribution only for students who work part-time, without changing the separate absence or LMS calculations.
 
 ## LMS Risk Mapping (Inverse)
 
@@ -60,12 +70,13 @@ A risk result is evaluated only when all of the following values are present, fi
 | `interaction_score` | 1-5 |
 | `stress_score` | 1-5 |
 | `motivation_score` | 1-5 |
+| `works_part_time` | boolean |
 
-Missing columns or blank cells cause that student's risk evaluation to be marked as not evaluated, while a valid final-exam score prediction may still be shown. The application displays the specific missing fields. Non-numeric, non-finite, or out-of-range source values are rejected during import or historical training; the risk service repeats its checks for records supplied through other paths. It does not replace missing risk inputs with zero, averages, or other fabricated values.
+Missing columns or blank cells, including an unknown `works_part_time` value, cause that student's risk evaluation to be marked as not evaluated, while a valid final-exam score prediction may still be shown. The application displays the specific missing fields. Non-numeric, non-finite, or out-of-range source values are rejected during import or historical training; the risk service repeats its checks for records supplied through other paths. It does not replace missing risk inputs with zero, averages, or other fabricated values.
 
 ## Important Notes
 
 - Thresholds are prototype assumptions until calibrated against representative HaUI historical data.
 - Missing or non-finite required inputs result in a clear error rather than a fabricated risk value.
-- Part-time employment currently receives a neutral risk contribution because its direction is unconfirmed.
+- Part-time employment does not add risk by itself; its 2% interaction contribution depends on the existing absence and LMS risk scores.
 - This is not an official HaUI policy document.
