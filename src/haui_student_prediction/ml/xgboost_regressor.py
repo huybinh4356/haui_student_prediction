@@ -116,7 +116,11 @@ def _cross_validate_candidates(
     has_repeated_students = False
     if groups is not None:
         normalized_groups = groups.astype("string").str.strip().str.casefold()
-        has_repeated_students = normalized_groups.notna().all() and normalized_groups.ne("").all() and normalized_groups.duplicated().any()
+        has_repeated_students = (
+            normalized_groups.notna().all()
+            and normalized_groups.ne("").all()
+            and normalized_groups.duplicated().any()
+        )
 
     if has_repeated_students:
         unique_groups = int(normalized_groups.nunique())
