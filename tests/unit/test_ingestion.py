@@ -485,6 +485,7 @@ def test_survey_score_outside_one_to_five_blocks_import(service, tmp_path):
 def test_missing_risk_inputs_warn_without_blocking_student_import(service, tmp_path):
     rows = _valid_rows()
     rows[0]["Tỷ lệ học LMS"] = ""
+    rows[1]["Đi làm thêm"] = ""
     path = _write_csv(tmp_path, "risk_inputs_missing.csv", rows)
 
     result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
@@ -503,6 +504,11 @@ def test_missing_risk_inputs_warn_without_blocking_student_import(service, tmp_p
     assert any(
         warning["column"] == "interaction_score"
         and warning["missing_column"] is True
+        for warning in warnings
+    )
+    assert any(
+        warning["column"] == "works_part_time"
+        and warning["missing_rows"] == 1
         for warning in warnings
     )
 
