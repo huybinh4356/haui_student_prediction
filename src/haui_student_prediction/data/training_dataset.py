@@ -130,5 +130,5 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
             "nhiều dữ liệu đa dạng hơn thường giúp đánh giá mô hình đáng tin cậy hơn."
         )
 
-    _validate_required_training_features(feature_data)
+    _validate_required_training_features(feature_data.loc[valid].copy())
     return feature_data.reset_index(drop=True)
