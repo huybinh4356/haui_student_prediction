@@ -55,7 +55,7 @@ Kiểm tra bằng code/test rằng tổng bằng 1.0 (100%). Từng component ri
 ### Quy tắc absence
 
 - `absence_percentage > 30`: `override_triggered = true`, `attendance_status = HOC_LAI` theo yêu cầu dự án.
-- `20 <= absence_percentage <= 30`: nguy cơ attendance cao.
+- `20 <= absence_percentage <= 75`: nguy cơ attendance cao.
 - `10 <= absence_percentage < 20`: trung bình.
 - `5 <= absence_percentage < 10`: thấp.
 - `0 <= absence_percentage < 5`: rất thấp.
@@ -114,7 +114,7 @@ Không chỉ trả một chuỗi nhãn. Không đưa logic UI vào risk engine.
 - Tổng trọng số profile bằng 1.
 - Thiếu TX2 ở profile B không chuyển sang A.
 - TX2 không áp dụng ở profile A vẫn tính được.
-- Các boundary absence: `0`, `4.99`, `5`, `9.99`, `10`, `19.99`, `20`, `30`, `30.01`, `31`, `100`.
+- Các boundary absence: `0`, `4.99`, `5`, `9.99`, `10`, `19.99`, `20`, `29.99`, `30`, `30.01`, `31`, `100`.
 - Validation `-0.01`, `100.01`.
 - Weighted risk theo bộ input biết trước.
 - Weights sum 100%; component risk bounds; total risk bounds.

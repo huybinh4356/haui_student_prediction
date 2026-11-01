@@ -22,7 +22,6 @@ CREATE TABLE IF NOT EXISTS student_records (
     tx1_score REAL,
     tx2_score REAL,
     midterm_score REAL,
-    actual_final_exam_score REAL,
     interaction_score REAL,
     stress_score REAL,
     motivation_score REAL,

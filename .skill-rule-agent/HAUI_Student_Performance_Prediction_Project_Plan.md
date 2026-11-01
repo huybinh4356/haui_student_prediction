@@ -467,7 +467,7 @@ Không nên làm giao diện cầu kỳ trước khi schema, công thức và ta
 - Điểm dự đoán, điểm thi thực tế và điểm tổng kết dự kiến được thể hiện tách biệt.  
 **12.3. Nguy cơ**  
 - Nghỉ >30% kích hoạt trạng thái ưu tiên.  
-- Ranh giới 5%, 10%, 20%, 30% không bị chồng lấn hoặc bỏ sót.  
+- Ranh giới nghỉ học 5%, 10%, 20%, 30% và LMS 5%, 10%, 20%, 30% không bị chồng lấn hoặc bỏ sót.  
 - Tỷ lệ LMS thấp tạo risk points cao hơn nếu ý nghĩa cột đúng như giả định.  
 - Điểm tương tác được chuẩn hóa đúng chiều.  
 - Trọng số cộng đúng 100%.  

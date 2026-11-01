@@ -9,8 +9,6 @@ from haui_student_prediction.app_config import get_project_root
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = get_project_root()
-_DEFAULT_DB_PATH = _PROJECT_ROOT / "data" / "session_student.db"
 _IDENTIFIER_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
@@ -19,8 +17,8 @@ class DataRepository:
         self.db_path = (
             Path(db_path).expanduser().resolve()
             if db_path is not None
-            else _DEFAULT_DB_PATH
-        )
+            else get_project_root() / "data" / "session_student.db"
+        ).resolve()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
     @staticmethod

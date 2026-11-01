@@ -4,6 +4,7 @@ from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION, Mode
 from haui_student_prediction.scoring.final_course_score import ScoringService
 from haui_student_prediction.features.feature_builder import FeatureBuilder
 from haui_student_prediction.features.feature_contract import FeatureContract
+from haui_student_prediction.data.column_mapping import is_training_target_column
 
 
 class PredictionService:
@@ -44,6 +45,31 @@ class PredictionService:
         if student_records is None or len(student_records) == 0:
             raise ValueError("Student records DataFrame is empty")
 
+        profile = self.scoring_service.profiles.get(course_profile_id)
+        if profile is None:
+            raise ValueError("Invalid profile_id")
+
+        if profile.has_tx2:
+            if "tx2_score" not in student_records.columns:
+                raise ValueError(
+                    "The selected course profile requires TX2, but the input has no tx2_score column."
+                )
+            tx2_values = pd.to_numeric(student_records["tx2_score"], errors="coerce")
+            valid_tx2 = tx2_values.notna() & np.isfinite(tx2_values.astype(float))
+            if not valid_tx2.all():
+                invalid_count = int((~valid_tx2).sum())
+                raise ValueError(
+                    "The selected course profile requires a valid TX2 score for every record; "
+                    f"{invalid_count} record(s) have missing or invalid TX2 scores."
+                )
+        elif "tx2_score" in student_records.columns:
+            tx2_values = pd.to_numeric(student_records["tx2_score"], errors="coerce")
+            if tx2_values.notna().any():
+                raise ValueError(
+                    "The input contains TX2 scores, but the selected profile is for courses "
+                    "without TX2. Select the profile with TX2 or separate the dataset by course."
+                )
+
         model, metadata = self.registry.load_model(model_version)
 
         # Reconstruct the contract stored with the model.
@@ -55,10 +81,13 @@ class PredictionService:
             )
         contract = FeatureContract(**features_meta)
         builder = FeatureBuilder(contract)
+        excluded_columns = [
+            column for column in student_records.columns
+            if is_training_target_column(column)
+        ]
+        prediction_input = student_records.drop(columns=excluded_columns, errors="ignore").copy()
 
-        # --- Requirement #6: extract_features blocks target & identifiers ---
-        # Missing columns raise a clear ValueError here.
-        X_infer = builder.extract_features(student_records, is_training=False)
+        X_infer = builder.extract_features(prediction_input, is_training=False)
 
         raw_predictions = model.predict(X_infer)
         if isinstance(raw_predictions, tuple):
@@ -66,27 +95,32 @@ class PredictionService:
         else:
             predictions = raw_predictions
 
-        results_df = student_records.copy()
+        results_df = prediction_input.copy()
         results_df["predicted_final_exam_score"] = np.asarray(predictions)
 
-        # --- Course score computation (unchanged logic) ---
         course_totals = []
+        course_score_status = []
         for _, row in results_df.iterrows():
-            tx1 = float(row["tx1_score"])
-            midterm = float(row["midterm_score"])
-            tx2 = row.get("tx2_score", None)
-            pred_final = float(row["predicted_final_exam_score"])
+            try:
+                tx1 = row.get("tx1_score")
+                midterm = row.get("midterm_score")
+                tx2 = row.get("tx2_score")
+                pred_final = row.get("predicted_final_exam_score")
+                tx2_val = float(tx2) if pd.notna(tx2) else None
 
-            tx2_val = float(tx2) if pd.notna(tx2) else None
-
-            course_total = self.scoring_service.calculate_score(
-                profile_id=course_profile_id,
-                tx1=tx1,
-                midterm=midterm,
-                predicted_final=pred_final,
-                tx2=tx2_val,
-            )
-            course_totals.append(course_total)
+                course_total = self.scoring_service.calculate_score(
+                    profile_id=course_profile_id,
+                    tx1=tx1,
+                    midterm=midterm,
+                    predicted_final=pred_final,
+                    tx2=tx2_val,
+                )
+                course_totals.append(course_total)
+                course_score_status.append("Đã tính")
+            except (KeyError, TypeError, ValueError) as exc:
+                course_totals.append(np.nan)
+                course_score_status.append(f"Chưa tính được điểm học phần: {exc}")
 
         results_df["predicted_course_score"] = course_totals
+        results_df["course_score_status"] = course_score_status
         return results_df

@@ -31,6 +31,38 @@ def service(cleaner, validator):
     return IngestionService(cleaner, validator)
 
 
+def test_column_mapping_normalizes_header_case_spaces_and_aliases(cleaner):
+    source = pd.DataFrame(
+        {
+            " student id ": ["SV01"],
+            "ABSENCE PERCENTAGE": [10.0],
+            "tx1_score": [8.0],
+            "Điểm giữa kỳ": [7.0],
+        }
+    )
+
+    result = cleaner.rename_columns(source)
+
+    assert result.columns.tolist() == [
+        "student_id",
+        "absence_percentage",
+        "tx1_score",
+        "midterm_score",
+    ]
+
+
+def test_column_mapping_rejects_duplicate_aliases(cleaner):
+    source = pd.DataFrame(
+        {
+            "Mã SV": ["SV01"],
+            "student_id": ["SV02"],
+        }
+    )
+
+    with pytest.raises(ValueError, match="same field"):
+        cleaner.rename_columns(source)
+
+
 REQUIRED_COLS = ["student_id", "absence_percentage", "tx1_score", "midterm_score"]
 COURSES_TX2 = ["IT101", "IT102"]
 
@@ -128,6 +160,18 @@ def test_non_numeric_value_blocks(service, tmp_path):
     assert conv[0]["row"] == 0
 
 
+def test_infinite_numeric_value_blocks(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm TX1"] = "inf"
+    path = _write_csv(tmp_path, "infinite.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    errors = [error for error in result.errors if error.get("kind") == "numeric_conversion"]
+    assert any(error["column"] == "tx1_score" and error["row"] == 0 for error in errors)
+
+
 def test_empty_cell_is_legitimate_missing(service, tmp_path):
     """An empty cell must become NaN, NOT 0, and must NOT block success."""
     rows = _valid_rows()
@@ -202,6 +246,20 @@ def test_duplicates_block_success(service, tmp_path):
     assert len(dup_errs) == 1
 
 
+
+def test_duplicate_ids_are_normalized_before_validation(service, tmp_path):
+    rows = _valid_rows()
+    rows[1]["Mã SV"] = " sv01 "
+    rows[1]["Mã môn"] = " it101 "
+    rows[1]["Học kỳ"] = " 2024.1 "
+    path = _write_csv(tmp_path, "dup_spaces.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    assert sorted(result.duplicate_indices) == [0, 1]
+
+
 # ---- 8. valid file ----------------------------------------------------------
 
 def test_valid_file_succeeds(service, tmp_path):
@@ -216,6 +274,44 @@ def test_valid_file_succeeds(service, tmp_path):
     assert bool(res.data["works_part_time"].iloc[0]) is False
     # "yes" -> True
     assert bool(res.data["works_part_time"].iloc[1]) is True
+
+
+def test_import_warns_when_duplicate_key_columns_are_missing(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row.pop("Mã môn", None)
+        row.pop("Học kỳ", None)
+    path = _write_csv(tmp_path, "missing_duplicate_keys.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    warning = next(
+        warning for warning in result.warnings
+        if warning.get("kind") == "duplicate_check_incomplete"
+    )
+    assert "course_id" in warning["column"]
+    assert "semester" in warning["column"]
+
+
+def test_rows_with_incomplete_duplicate_keys_are_warned_not_false_duplicates(service, tmp_path):
+    rows = _valid_rows()
+    rows[1]["Mã SV"] = "SV01"
+    rows[1]["Mã môn"] = ""
+    rows[1]["Học kỳ"] = ""
+    rows[0]["Mã môn"] = "IT101"
+    rows[0]["Học kỳ"] = "2024.1"
+    path = _write_csv(tmp_path, "incomplete_duplicate_values.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.duplicate_indices == []
+    warning = next(
+        warning for warning in result.warnings
+        if warning.get("kind") == "duplicate_check_incomplete_values"
+    )
+    assert warning["rows_with_missing_key"] == 1
 
 
 # ---- 9. TX2 determination ---------------------------------------------------
@@ -233,6 +329,68 @@ def test_tx2_determination(service, tmp_path):
     assert bool(r1["has_tx2"]) is False
 
 
+def test_tx2_inference_when_course_mapping_is_empty(service, tmp_path):
+    path = _write_csv(tmp_path, "tx2_inferred.csv", _valid_rows())
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    data = result.data.set_index("student_id")
+    assert bool(data.loc["SV01", "has_tx2"]) is True
+    assert pd.isna(data.loc["SV02", "has_tx2"])
+
+
+def test_tx2_inference_without_course_id(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row.pop("Mã môn", None)
+    path = _write_csv(tmp_path, "tx2_without_course_id.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    data = result.data.set_index("student_id")
+    assert bool(data.loc["SV01", "has_tx2"]) is True
+    assert pd.isna(data.loc["SV02", "has_tx2"])
+
+
+def test_missing_course_id_remains_unknown_with_explicit_tx2_mapping(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row["Mã môn"] = ""
+    path = _write_csv(tmp_path, "tx2_missing_course_id.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data["has_tx2"].isna().all()
+
+
+def test_missing_course_ids_do_not_share_tx2_inference_group(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row["Mã môn"] = ""
+    path = _write_csv(tmp_path, "tx2_missing_course_ids_inferred.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    data = result.data.set_index("student_id")
+    assert bool(data.loc["SV01", "has_tx2"]) is True
+    assert pd.isna(data.loc["SV02", "has_tx2"])
+
+
+def test_missing_tx2_column_does_not_imply_no_tx2(service, tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row.pop("Điểm TX2", None)
+    path = _write_csv(tmp_path, "tx2_column_missing.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, [])
+
+    assert result.is_success
+    assert result.data["has_tx2"].isna().all()
+
+
 # ---- 10. result consistency -------------------------------------------------
 
 def test_result_consistency_no_success_returns_none_data(service, tmp_path):
@@ -248,3 +406,117 @@ def test_result_consistency_no_success_returns_none_data(service, tmp_path):
     assert isinstance(res.duplicate_indices, list)
     # missing_columns present and typed list[str]
     assert isinstance(res.missing_columns, list)
+
+
+
+def test_historical_target_column_is_removed_from_prediction_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm thi"] = "9.0"
+    path = _write_csv(tmp_path, "prediction_input.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data is not None
+    assert "Điểm thi" not in result.data.columns
+    assert "target_final_exam_score" not in result.data.columns
+    assert any(
+        warning.get("kind") == "training_target_excluded"
+        for warning in result.warnings
+    )
+
+
+def test_pandas_na_is_treated_as_missing_not_as_a_conversion_error(cleaner):
+    dataframe = pd.DataFrame(
+        {
+            "student_id": [pd.NA],
+            "course_id": [pd.NA],
+            "semester": [pd.NA],
+            "works_part_time": [pd.NA],
+        }
+    )
+
+    result = cleaner.convert_types(cleaner.rename_columns(dataframe))
+
+    assert pd.isna(result.loc[0, "student_id"])
+    assert pd.isna(result.loc[0, "course_id"])
+    assert pd.isna(result.loc[0, "semester"])
+    assert pd.isna(result.loc[0, "works_part_time"])
+    assert cleaner.collect_conversion_errors() == []
+
+
+def test_midterm_exam_header_maps_to_midterm_score(cleaner):
+    dataframe = pd.DataFrame({"Điểm thi giữa kỳ": [7.5]})
+
+    result = cleaner.rename_columns(dataframe)
+
+    assert result.columns.tolist() == ["midterm_score"]
+
+
+
+def test_academic_score_outside_zero_to_ten_blocks_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Điểm TX1"] = "10.5"
+    path = _write_csv(tmp_path, "score_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    assert result.data is None
+    errors = [error for error in result.errors if error["kind"] == "score_out_of_range"]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "tx1_score"
+    assert errors[0]["row"] == 0
+
+
+def test_survey_score_outside_one_to_five_blocks_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Mức độ stress"] = "6"
+    path = _write_csv(tmp_path, "survey_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert not result.is_success
+    errors = [error for error in result.errors if error["kind"] == "score_out_of_range"]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "stress_score"
+
+
+def test_missing_risk_inputs_warn_without_blocking_student_import(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Tỷ lệ học LMS"] = ""
+    path = _write_csv(tmp_path, "risk_inputs_missing.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    assert result.is_success
+    assert result.data is not None
+    warnings = [
+        warning for warning in result.warnings
+        if warning["kind"] == "risk_data_incomplete"
+    ]
+    assert any(
+        warning["column"] == "lms_learning_percentage"
+        and warning["missing_rows"] == 1
+        for warning in warnings
+    )
+    assert any(
+        warning["column"] == "interaction_score"
+        and warning["missing_column"] is True
+        for warning in warnings
+    )
+
+
+def test_percentage_range_is_reported_once(service, tmp_path):
+    rows = _valid_rows()
+    rows[0]["Tỷ lệ nghỉ"] = "101"
+    path = _write_csv(tmp_path, "percentage_out_of_range.csv", rows)
+
+    result = service.load_and_validate(path, REQUIRED_COLS, COURSES_TX2)
+
+    errors = [
+        error for error in result.errors
+        if error["kind"] == "percentage_out_of_range"
+    ]
+    assert len(errors) == 1
+    assert errors[0]["column"] == "absence_percentage"

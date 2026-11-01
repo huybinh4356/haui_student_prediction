@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from haui_student_prediction.features.feature_contract import (
     FeatureContract,
@@ -35,23 +36,30 @@ class FeatureBuilder:
                      and c != self.contract.target_column]
 
         missing_features = [c for c in safe_cols if c not in df.columns]
-        if missing_features:
+        if is_training and missing_features:
             raise ValueError(f"Missing required feature columns: {missing_features}")
 
-        if is_training:
-            if self.contract.target_column not in df.columns:
-                raise ValueError(
-                    f"Target column '{self.contract.target_column}' is missing for training"
-                )
+        if is_training and self.contract.target_column not in df.columns:
+            raise ValueError(
+                f"Target column '{self.contract.target_column}' is missing for training"
+            )
 
-        X = df[safe_cols].copy()
+        X = df.reindex(columns=safe_cols).copy()
 
         # sklearn's SimpleImputer/OneHotEncoder do not accept bool dtype; cast
         # categorical columns to string/object so they are treated as
         # categorical text. Bool True/False -> "True"/"False".
         for col in self.contract.categorical_features:
-            if col in X.columns and X[col].dtype == bool:
+            if col not in X.columns:
+                continue
+            if X[col].dtype == bool:
                 X[col] = X[col].astype(str)
+            elif X[col].dtype == object:
+                X[col] = X[col].map(
+                    lambda value: str(value) if isinstance(value, (bool, np.bool_)) else value
+                )
+            elif X[col].isna().all():
+                X[col] = X[col].astype(object)
 
         return X
 

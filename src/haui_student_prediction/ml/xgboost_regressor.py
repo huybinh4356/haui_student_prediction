@@ -56,6 +56,8 @@ def _prepare_labeled_data(
         raise ValueError(f"Target column '{target_column}' is missing from {dataset_name} data")
 
     target = pd.to_numeric(dataframe[target_column], errors="coerce")
+    if target.isna().all():
+        raise ValueError(f"{dataset_name} target '{target_column}' is entirely NaN")
     target_values = target.to_numpy(dtype=float, na_value=np.nan)
     valid_mask = np.isfinite(target_values)
     prepared = dataframe.loc[valid_mask].copy()
@@ -63,7 +65,7 @@ def _prepare_labeled_data(
 
     if len(prepared) < minimum_rows:
         raise ValueError(
-            f"{dataset_name} data has {len(prepared)} valid target rows; "
+            f"{dataset_name} data is too small: {len(prepared)} valid target rows; "
             f"at least {minimum_rows} are required"
         )
 
@@ -77,18 +79,11 @@ def train_xgboost_and_evaluate(
 ) -> Tuple[Pipeline, ModelMetrics]:
     contract.validate()
     target_column = contract.target_column
-
     train_data = _prepare_labeled_data(
         df_train,
         target_column,
         minimum_rows=3,
         dataset_name="Training",
-    )
-    test_data = _prepare_labeled_data(
-        df_test,
-        target_column,
-        minimum_rows=2,
-        dataset_name="Test",
     )
 
     builder = FeatureBuilder(contract)
@@ -97,6 +92,19 @@ def train_xgboost_and_evaluate(
     y_train = train_data[target_column]
     evaluation_model.fit(X_train, y_train)
 
+    if df_test is None:
+        raise ValueError("Test data is None")
+
+    if df_test.empty:
+        metrics = ModelMetrics(float("nan"), float("nan"), float("nan"))
+        return evaluation_model, metrics
+
+    test_data = _prepare_labeled_data(
+        df_test,
+        target_column,
+        minimum_rows=1,
+        dataset_name="Test",
+    )
     X_test = builder.extract_features(test_data, is_training=False)
     y_test = test_data[target_column]
     predictions = np.asarray(evaluation_model.predict(X_test), dtype=float)
@@ -108,12 +116,6 @@ def train_xgboost_and_evaluate(
     )
 
     full_data = pd.concat([train_data, test_data], axis=0)
-    full_data = _prepare_labeled_data(
-        full_data,
-        target_column,
-        minimum_rows=3,
-        dataset_name="Combined",
-    )
     final_model = _new_pipeline(contract)
     X_full = builder.extract_features(full_data, is_training=True)
     y_full = full_data[target_column]

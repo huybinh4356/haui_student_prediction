@@ -36,12 +36,12 @@ echo   - Dang nang cap pip...
 "%VENV_PYTHON%" -m pip install --upgrade pip
 if %ERRORLEVEL% NEQ 0 goto :install_failed
 
-echo   - Cai dat du an va cac thu vien, bao gom XGBoost...
+echo   - Cai dat du an va cac thu vien, bao gom XGBoost va CatBoost...
 "%VENV_PYTHON%" -m pip install -e ".[dev]"
 if %ERRORLEVEL% NEQ 0 goto :install_failed
 
-echo   - Kiem tra XGBoost...
-"%VENV_PYTHON%" -c "import xgboost; print('XGBoost version:', xgboost.__version__)"
+echo   - Kiem tra XGBoost va CatBoost...
+"%VENV_PYTHON%" -c "import xgboost, catboost; print('XGBoost:', xgboost.__version__); print('CatBoost:', catboost.__version__)"
 if %ERRORLEVEL% NEQ 0 goto :install_failed
 
 echo.
@@ -102,7 +102,7 @@ exit /b 1
 :install_failed
 color 0C
 echo [LOI] Cai dat hoac kiem tra dependencies that bai!
-echo Kiem tra thong bao loi ben tren, dac biet la pyproject.toml va XGBoost.
+echo Kiem tra thong bao loi ben tren, dac biet la pyproject.toml, XGBoost va CatBoost.
 echo.
 pause
 exit /b 1

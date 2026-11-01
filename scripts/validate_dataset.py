@@ -20,7 +20,7 @@ def main():
     cleaner = DataCleaner(get_default_column_mapping())
     validator = DataValidator()
     service = IngestionService(cleaner, validator)
-    result = service.import_dataset(args.file, args.required_cols, args.courses_tx2)
+    result = service.load_and_validate(args.file, args.required_cols, args.courses_tx2)
 
     print(f"Success: {result.is_success}")
     print(f"Rows: {len(result.data) if result.data is not None else 0}")

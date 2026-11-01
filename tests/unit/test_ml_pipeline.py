@@ -107,6 +107,15 @@ def test_contract_rejects_identifier_as_feature():
             )
 
 
+def test_contract_rejects_historical_target_alias_as_feature():
+    with pytest.raises(ValueError, match="target columns must not be features"):
+        FeatureContract(
+            numerical_features=["Điểm thi thực tế"],
+            categorical_features=[],
+            target_column="target_final_exam_score",
+        )
+
+
 def test_contract_rejects_overlap_num_cat():
     with pytest.raises(ValueError, match="both numerical and categorical"):
         FeatureContract(
@@ -144,6 +153,26 @@ def test_builder_missing_feature_raises(builder):
     df = _make_train_df().drop(columns=["tx1_score"])
     with pytest.raises(ValueError, match="Missing required feature columns"):
         builder.extract_features(df, is_training=True)
+
+
+def test_builder_missing_feature_is_nan_during_inference(builder):
+    df = _make_test_df().drop(columns=["tx1_score"])
+    features = builder.extract_features(df, is_training=False)
+
+    assert "tx1_score" in features.columns
+    assert features["tx1_score"].isna().all()
+
+
+def test_preprocessor_handles_missing_categorical_feature_at_inference(builder):
+    preprocessor = build_preprocessing_pipeline(NUM_COLS, CAT_COLS)
+    train_features = builder.extract_features(_make_train_df(), is_training=True)
+    preprocessor.fit(train_features)
+
+    inference_data = _make_test_df().drop(columns=["works_part_time"])
+    inference_features = builder.extract_features(inference_data, is_training=False)
+    transformed = preprocessor.transform(inference_features)
+
+    assert transformed.shape[0] == len(inference_data)
 
 
 def test_builder_missing_target_raises(builder):
@@ -190,13 +219,12 @@ def test_train_evaluate_normal(contract):
     assert np.isfinite(metrics.r2)
 
 
-def test_train_evaluate_uses_linear_regression(contract):
-    """Requirement #3: model must be LinearRegression, not Ridge."""
+def test_train_evaluate_uses_xgboost(contract):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, _ = train_and_evaluate(df_train, df_test, contract)
-    from sklearn.linear_model import LinearRegression
-    assert isinstance(model.named_steps["regressor"], LinearRegression)
+    from xgboost import XGBRegressor
+    assert isinstance(model.named_steps["regressor"], XGBRegressor)
 
 
 def test_train_evaluate_no_leakage_small_test(contract):
@@ -324,22 +352,26 @@ def test_prediction_service_predict_normal(registry, scoring_service, contract):
     result = svc.predict_student_results(df_test, "1.0.0", "no_tx2")
     assert "predicted_final_exam_score" in result.columns
     assert "predicted_course_score" in result.columns
+    assert "target_final_exam_score" not in result.columns
     assert len(result) == 5
     # Predicted scores must be finite numbers
     assert result["predicted_final_exam_score"].notna().all()
 
 
-def test_prediction_service_predict_missing_feature_raises(registry, scoring_service, contract):
+def test_prediction_service_predicts_when_optional_feature_column_is_absent(registry, scoring_service, contract):
     df_train = _make_train_df(n=20)
     df_test = _make_test_df(n=5)
     model, metrics = train_and_evaluate(df_train, df_test, contract)
     registry.save_model(model, "1.0.0", "h", metrics, contract)
 
     svc = PredictionService(registry, scoring_service)
-    # Remove a required feature column
-    bad_df = df_test.drop(columns=["tx1_score"])
-    with pytest.raises(ValueError, match="Missing required feature columns"):
-        svc.predict_student_results(bad_df, "1.0.0", "no_tx2")
+    incomplete_df = df_test.drop(columns=["works_part_time"])
+    result = svc.predict_student_results(incomplete_df, "1.0.0", "no_tx2")
+
+    assert len(result) == len(incomplete_df)
+    assert result["predicted_final_exam_score"].notna().all()
+    assert "works_part_time" not in result.columns
+    assert result["course_score_status"].eq("Đã tính").all()
 
 
 def test_prediction_service_empty_input_raises(registry, scoring_service, contract):
@@ -456,3 +488,43 @@ def test_prediction_service_unavailable_after_artifact_deleted(
     assert not svc.is_model_ready("1.0.0")
     with pytest.raises(RuntimeError, match="not ready"):
         svc.predict_student_results(df_test, "1.0.0", "no_tx2")
+
+
+def test_registry_creates_missing_parent_directories(tmp_path):
+    registry_path = tmp_path / "new_root" / "models" / "registry.json"
+    artifacts_path = tmp_path / "new_root" / "models" / "artifacts"
+
+    registry = ModelRegistry(
+        registry_path=str(registry_path),
+        artifacts_dir=str(artifacts_path),
+    )
+
+    assert registry_path.exists()
+    assert registry._load_registry() == {}
+    assert artifacts_path.is_dir()
+
+
+def test_prediction_service_rejects_tx2_when_no_tx2_profile_is_selected(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    input_data = _make_test_df(n=5)
+    input_data["tx2_score"] = 6.0
+    service = PredictionService(registry, scoring_service)
+
+    with pytest.raises(ValueError, match="input contains TX2 scores"):
+        service.predict_student_results(input_data, "1.0.0", "no_tx2")
+
+
+def test_prediction_service_requires_tx2_for_tx2_profile(registry, scoring_service, contract):
+    df_train = _make_train_df(n=20)
+    df_test = _make_test_df(n=5)
+    model, metrics = train_and_evaluate(df_train, df_test, contract)
+    registry.save_model(model, "1.0.0", "hash", metrics, contract)
+
+    service = PredictionService(registry, scoring_service)
+
+    with pytest.raises(ValueError, match="requires TX2"):
+        service.predict_student_results(df_test, "1.0.0", "with_tx2")

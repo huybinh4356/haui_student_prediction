@@ -15,13 +15,13 @@ def test_xgboost_regressor_trains_evaluates_and_predicts():
         {
             "tx1_score": 3.0 + values * 0.2,
             "midterm_score": 4.0 + values * 0.15,
-            "actual_final_exam_score": np.clip(2.5 + values * 0.18, 0.0, 10.0),
+            "target_final_exam_score": np.clip(2.5 + values * 0.18, 0.0, 10.0),
         }
     )
     contract = FeatureContract(
         numerical_features=["tx1_score", "midterm_score"],
         categorical_features=[],
-        target_column="actual_final_exam_score",
+        target_column="target_final_exam_score",
     )
 
     model, metrics = train_xgboost_and_evaluate(

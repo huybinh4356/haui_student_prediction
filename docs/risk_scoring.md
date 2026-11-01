@@ -14,7 +14,7 @@ The MVP uses a weighted rule-based system, not an ML classifier. Risk scores are
 | 5-<10% | Low risk |
 | 0-<5% | Very low risk |
 
-At exactly 30%, override does NOT trigger. Above 30%, override is independent of other factors.
+At exactly 30%, the attendance override does not trigger. Above 30%, the override is independent of other factors.
 
 ## Component Weights (Total 100%)
 
@@ -24,7 +24,7 @@ At exactly 30%, override does NOT trigger. Above 30%, override is independent of
 | Academic score | 8% | Lower score = higher risk |
 | LMS participation | 8% | Lower LMS = higher risk |
 | Interaction | 4% | Lower interaction = higher risk |
-| Work part-time | 2% | Neutral (unconfirmed direction) |
+| Work part-time | 2% | Neutral (unconfirmed direction; 50 risk points for either status) |
 | Stress | 1.5% | Higher stress = higher risk (to confirm) |
 | Motivation | 1.5% | Lower motivation = higher risk (to confirm) |
 
@@ -48,9 +48,24 @@ At exactly 30%, override does NOT trigger. Above 30%, override is independent of
 | 60-<80 | High |
 | 80-100 | Very high |
 
+## Required inputs and validation
+
+A risk result is evaluated only when all of the following values are present, finite, and within the configured range:
+
+| Field | Allowed range |
+|-------|---------------|
+| `absence_percentage` | 0-100 |
+| `lms_learning_percentage` | 0-100 |
+| `predicted_course_score` | 0-10 |
+| `interaction_score` | 1-5 |
+| `stress_score` | 1-5 |
+| `motivation_score` | 1-5 |
+
+Missing columns or blank cells cause that student's risk evaluation to be marked as not evaluated, while a valid final-exam score prediction may still be shown. The application displays the specific missing fields. Non-numeric, non-finite, or out-of-range source values are rejected during import or historical training; the risk service repeats its checks for records supplied through other paths. It does not replace missing risk inputs with zero, averages, or other fabricated values.
+
 ## Important Notes
 
-- All thresholds are **prototype assumptions** pending calibration with HaUI historical data.
-- Missing required fields result in `ValueError` with clear field name, not default risk assignment.
-- `works_part_time` uses neutral mapping (50 risk points) until data confirms direction.
-- This is NOT an official HaUI policy document.
+- Thresholds are prototype assumptions until calibrated against representative HaUI historical data.
+- Missing or non-finite required inputs result in a clear error rather than a fabricated risk value.
+- Part-time employment currently receives a neutral risk contribution because its direction is unconfirmed.
+- This is not an official HaUI policy document.
