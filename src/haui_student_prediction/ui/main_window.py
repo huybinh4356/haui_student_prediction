@@ -116,6 +116,15 @@ class _TrainingWorker(QThread):
                 "motivation_score",
             ]
             categorical_candidates = ["works_part_time", "major", "course_id"]
+            excluded_features = {}
+            for column in numeric_candidates + categorical_candidates:
+                if column not in data.columns:
+                    excluded_features[column] = "Không có trong dữ liệu lịch sử"
+                elif not data[column].notna().any():
+                    excluded_features[column] = "Toàn bộ giá trị bị thiếu"
+                elif data[column].nunique(dropna=True) <= 1:
+                    excluded_features[column] = "Chỉ có một giá trị, không đủ độ biến thiên"
+
             numeric_features = [
                 column
                 for column in numeric_candidates
@@ -174,6 +183,7 @@ class _TrainingWorker(QThread):
                     "feature_count": len(contract.get_all_features()),
                     "dataset_hash": dataset_hash,
                     "features": contract.get_all_features(),
+                    "excluded_features": excluded_features,
                 }
             )
         except Exception as exc:
