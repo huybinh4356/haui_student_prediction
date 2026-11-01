@@ -167,6 +167,10 @@ class PredictionService:
 
         required_score_fields = set(REQUIRED_SCORE_FIELDS)
         if profile.has_tx2:
+            if "tx2_score" not in prediction_input.columns:
+                raise ValueError(
+                    "The selected course profile requires TX2, but the input has no tx2_score column."
+                )
             required_score_fields.add("tx2_score")
         elif "tx2_score" in prediction_input.columns:
             tx2_values = pd.to_numeric(
