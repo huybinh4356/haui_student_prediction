@@ -16,7 +16,8 @@ def tree_feature_contributions(
     original source column.
     """
     if feature_dataframe is None or feature_dataframe.empty:
-        return pd.DataFrame(index=feature_dataframe.index if feature_dataframe is not None else None)
+        index = feature_dataframe.index if feature_dataframe is not None else None
+        return pd.DataFrame(index=index)
 
     if not hasattr(model, "named_steps"):
         raise TypeError("The trained model must be an sklearn Pipeline.")
