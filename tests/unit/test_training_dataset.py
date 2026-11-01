@@ -145,3 +145,53 @@ def test_training_dataset_rejects_feature_outside_configured_range(tmp_path):
 
     with pytest.raises(ValueError, match="Điểm thường xuyên 1"):
         load_historical_training_dataset(str(source))
+
+
+def test_training_dataset_rejects_missing_required_midterm_feature(tmp_path):
+    rows = [
+        {
+            "Mã SV": f"SV{index + 1:03d}",
+            "Điểm TX1": 5.0 + index * 0.2,
+            "Điểm thi": 6.0 + index * 0.1,
+        }
+        for index in range(12)
+    ]
+    source = tmp_path / "history_missing_midterm.csv"
+    pd.DataFrame(rows).to_csv(source, index=False, encoding="utf-8-sig")
+
+    with pytest.raises(ValueError, match="midterm_score"):
+        load_historical_training_dataset(str(source))
+
+
+def test_training_dataset_rejects_required_feature_with_too_many_missing_values(tmp_path):
+    rows = [
+        {
+            "Mã SV": f"SV{index + 1:03d}",
+            "Điểm TX1": "" if index < 3 else 6.0 + index * 0.1,
+            "Điểm GK": 5.0 + index * 0.2,
+            "Điểm thi": 6.0 + index * 0.1,
+        }
+        for index in range(12)
+    ]
+    source = tmp_path / "history_missing_tx1.csv"
+    pd.DataFrame(rows).to_csv(source, index=False, encoding="utf-8-sig")
+
+    with pytest.raises(ValueError, match="20%"):
+        load_historical_training_dataset(str(source))
+
+
+def test_training_dataset_rejects_constant_required_feature(tmp_path):
+    rows = [
+        {
+            "Mã SV": f"SV{index + 1:03d}",
+            "Điểm TX1": 5.0 + index * 0.2,
+            "Điểm GK": 7.0,
+            "Điểm thi": 6.0 + index * 0.1,
+        }
+        for index in range(12)
+    ]
+    source = tmp_path / "history_constant_midterm.csv"
+    pd.DataFrame(rows).to_csv(source, index=False, encoding="utf-8-sig")
+
+    with pytest.raises(ValueError, match="độ biến thiên"):
+        load_historical_training_dataset(str(source))
