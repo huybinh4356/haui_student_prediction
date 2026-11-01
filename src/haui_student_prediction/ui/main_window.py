@@ -1798,6 +1798,11 @@ class MainWindow(QMainWindow):
             f"trung bình có dấu {float(values.get('mean_signed_points', 0.0)):+.3f}"
             for feature, values in ranked_features
         ) or "Chưa đủ dữ liệu kiểm thử để tính mức ảnh hưởng biến."
+        excluded_features = result.get("excluded_features", {})
+        excluded_feature_text = " | ".join(
+            f"{feature_labels.get(feature, feature)}: {reason}"
+            for feature, reason in excluded_features.items()
+        ) or "Không có biến ứng viên nào bị loại."
         self.lbl_training_status.setText(
             f"Đã lưu mô hình {result['version']}. Tập huấn luyện: {result['train_rows']:,} dòng; "
             f"tập kiểm thử: {result['test_rows']:,} dòng. Cấu hình được chọn: {metrics.selected_candidate}."
@@ -1808,6 +1813,8 @@ class MainWindow(QMainWindow):
             f"Khoảng điểm thực tế: {actual_range}    Khoảng dự đoán: {predicted_range}\n"
             f"Std dự đoán / Std thực tế: {spread_ratio}    Số điểm dự đoán khác nhau: {metrics.prediction_unique_count}\n"
             f"Đánh giá: {baseline_status}\n"
+            f"Ảnh hưởng biến TreeSHAP (Test): {feature_effect_text}\n"
+            f"Biến không học được từ dữ liệu lịch sử: {excluded_feature_text}\n"
             f"Số đặc trưng: {result['feature_count']}\n"
             f"Mã nhận diện bộ dữ liệu: {result['dataset_hash']}\n"
             f"Các đặc trưng: {', '.join(result['features'])}"
@@ -1823,7 +1830,11 @@ class MainWindow(QMainWindow):
             f"Baseline MAE: {baseline_mae}\n"
             f"Std dự đoán / Std thực tế: {spread_ratio}\n"
             f"{baseline_status}\n"
-            "Các chỉ số Test là kết quả trên tập kiểm thử giữ riêng; cần dùng dữ liệu HaUI thực tế đủ đa dạng để xác nhận chất lượng.",
+            f"Ảnh hưởng biến TreeSHAP (Test): {feature_effect_text}\n"
+            f"Biến không học được từ dữ liệu lịch sử: {excluded_feature_text}\n"
+            "Đóng góp dương làm tăng điểm so với mức cơ sở của mô hình; đóng góp âm làm giảm điểm. "
+            "Đây là giải thích mô hình, không phải quan hệ nhân quả hay trọng số cố định. "
+            "Các chỉ số Test cần được xác nhận bằng dữ liệu HaUI thực tế đủ đa dạng.",
         )
 
     def _on_training_failed(self, message: str) -> None:
