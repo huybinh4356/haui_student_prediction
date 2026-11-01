@@ -12,6 +12,24 @@ class ModelMetrics:
     mae: float
     rmse: float
     r2: float
+    cv_mae_mean: float = float("nan")
+    cv_mae_std: float = float("nan")
+    cv_rmse_mean: float = float("nan")
+    cv_rmse_std: float = float("nan")
+    baseline_mae: float = float("nan")
+    baseline_rmse: float = float("nan")
+    actual_mean: float = float("nan")
+    actual_std: float = float("nan")
+    actual_min: float = float("nan")
+    actual_max: float = float("nan")
+    predicted_mean: float = float("nan")
+    predicted_std: float = float("nan")
+    predicted_min: float = float("nan")
+    predicted_max: float = float("nan")
+    prediction_spread_ratio: float = float("nan")
+    prediction_unique_count: int = 0
+    beats_baseline: bool = False
+    selected_candidate: str = ""
 
 
 def train_and_evaluate(
