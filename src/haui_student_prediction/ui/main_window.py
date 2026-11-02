@@ -37,6 +37,7 @@ from PyQt6.QtWidgets import (
 )
 
 from haui_student_prediction.ml.model_registry import ACTIVE_MODEL_VERSION
+from haui_student_prediction.ml.accuracy_evaluator import compute_all_accuracy_metrics, AccuracyEvaluationResult
 
 
 class _MetricCard(QFrame):
@@ -154,6 +155,17 @@ class _TrainingWorker(QThread):
             )
 
             model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
+
+            from haui_student_prediction.features.feature_builder import FeatureBuilder
+            from haui_student_prediction.ml.accuracy_evaluator import compute_all_accuracy_metrics
+
+            builder = FeatureBuilder(contract)
+            X_test = builder.extract_features(test_data, is_training=False)
+            y_test_pred = model.predict(X_test)
+            y_test_true = test_data[target_column].values
+            sample_ids = test_data["student_id"].astype(str).tolist() if "student_id" in test_data.columns else None
+            eval_result = compute_all_accuracy_metrics(y_test_true, y_test_pred, sample_ids=sample_ids)
+
             hashed_values = pd.util.hash_pandas_object(
                 data,
                 index=True,
@@ -178,6 +190,7 @@ class _TrainingWorker(QThread):
                 {
                     "version": ACTIVE_MODEL_VERSION,
                     "metrics": metrics,
+                    "eval_result": eval_result,
                     "train_rows": len(train_data),
                     "test_rows": len(test_data),
                     "feature_count": len(contract.get_all_features()),
@@ -273,6 +286,35 @@ class _UciBenchmarkWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class _UciTransferWorker(QThread):
+    succeeded = pyqtSignal(object)
+    failed = pyqtSignal(str)
+
+    def __init__(self, subject: str, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.subject = subject
+
+    def run(self) -> None:
+        try:
+            from haui_student_prediction.ml.uci_model_comparison import train_and_register_uci_transfer_model
+            model, metrics, eval_res = train_and_register_uci_transfer_model(
+                subject=self.subject,
+                version=ACTIVE_MODEL_VERSION,
+                random_state=42,
+            )
+            self.succeeded.emit(
+                {
+                    "model": model,
+                    "metrics": metrics,
+                    "eval_result": eval_res,
+                    "subject": self.subject,
+                }
+            )
+        except Exception as exc:
+            logging.exception("UCI transfer model registration failed")
+            self.failed.emit(str(exc))
+
+
 class MainWindow(QMainWindow):
     card_model: _MetricCard
     training_progress: QProgressBar
@@ -293,7 +335,9 @@ class MainWindow(QMainWindow):
         self.current_file_path: str | None = None
         self.training_file_path: str | None = None
         self._training_worker: _TrainingWorker | None = None
+        self._latest_eval_result: AccuracyEvaluationResult | None = None
         self._uci_training_worker: _UciBenchmarkWorker | None = None
+        self._uci_transfer_worker: _UciTransferWorker | None = None
         self._page_titles = [
             "Tổng quan",
             "Dữ liệu sinh viên",
@@ -591,14 +635,16 @@ class MainWindow(QMainWindow):
         layout.addWidget(table_frame, 1)
 
     def _build_eda_page(self, body: QWidget, layout: QVBoxLayout) -> None:
-        filters_frame, filters_layout = self._surface("Thiết lập phân tích")
+        filters_frame, filters_layout = self._surface("Thiết lập phân tích trực quan")
         row = QHBoxLayout()
         self.cb_chart_type = QComboBox()
-        self.cb_chart_type.addItem("Histogram", "histogram")
-        self.cb_chart_type.addItem("Biểu đồ đếm", "count")
-        self.cb_chart_type.addItem("Boxplot theo nhóm", "boxplot")
-        self.cb_chart_type.addItem("Scatter plot", "scatter")
-        self.cb_chart_type.addItem("Correlation heatmap", "heatmap")
+        self.cb_chart_type.addItem("Phân phối tần số (Histogram)", "histogram")
+        self.cb_chart_type.addItem("Phân phối mật độ nhóm (KDE so sánh)", "kde")
+        self.cb_chart_type.addItem("Cơ cấu số lượng (Bar / Count plot)", "count")
+        self.cb_chart_type.addItem("Phân vị & Ngoại lai (Boxplot)", "boxplot")
+        self.cb_chart_type.addItem("Phân bố đàn vĩ cầm (Violin plot)", "violin")
+        self.cb_chart_type.addItem("Tương quan phân tán (Scatter plot kèm hồi quy)", "scatter")
+        self.cb_chart_type.addItem("Ma trận tương quan đa biến (Correlation Heatmap)", "heatmap")
         self.cb_eda_col = QComboBox()
         self.cb_eda_category = QComboBox()
         self.cb_eda_x = QComboBox()
@@ -607,28 +653,37 @@ class MainWindow(QMainWindow):
         self.btn_save_chart = QPushButton("Lưu biểu đồ")
         self.btn_save_chart.clicked.connect(self._save_current_chart)
         row.addWidget(QLabel("Loại biểu đồ"))
-        row.addWidget(self.cb_chart_type, 1)
-        row.addWidget(QLabel("Biến chính"))
+        row.addWidget(self.cb_chart_type, 2)
+        row.addWidget(QLabel("Chỉ số chính"))
         row.addWidget(self.cb_eda_col, 2)
-        row.addWidget(QLabel("Nhóm"))
+        row.addWidget(QLabel("Nhóm phân loại"))
         row.addWidget(self.cb_eda_category, 2)
         row.addWidget(self.btn_plot)
         row.addWidget(self.btn_save_chart)
         filters_layout.addLayout(row)
 
         scatter_row = QHBoxLayout()
-        scatter_row.addWidget(QLabel("Trục X"))
+        scatter_row.addWidget(QLabel("Trục X (Biến giải thích)"))
         scatter_row.addWidget(self.cb_eda_x, 1)
-        scatter_row.addWidget(QLabel("Trục Y"))
+        scatter_row.addWidget(QLabel("Trục Y (Biến kết quả)"))
         scatter_row.addWidget(self.cb_eda_y, 1)
         filters_layout.addLayout(scatter_row)
         self.cb_chart_type.currentIndexChanged.connect(self._update_eda_controls)
         layout.addWidget(filters_frame)
 
-        chart_frame, chart_layout = self._surface("Biểu đồ")
+        insights_frame, insights_layout = self._surface("Nhận định & Insight sư phạm chuyên sâu")
+        self.lbl_eda_insights = QLabel("Nhập dữ liệu sinh viên để hệ thống tự động trích xuất các insight sư phạm quan trọng.")
+        self.lbl_eda_insights.setWordWrap(True)
+        self.lbl_eda_insights.setStyleSheet(
+            "background:#F0FDF4;padding:12px;border:1px solid #BBF7D0;border-radius:8px;color:#166534;font-size:13px;line-height:1.6;"
+        )
+        insights_layout.addWidget(self.lbl_eda_insights)
+        layout.addWidget(insights_frame)
+
+        chart_frame, chart_layout = self._surface("Biểu đồ phân tích trực quan")
         self.chart_container = QVBoxLayout()
         self.chart_container.setSpacing(4)
-        self.chart_placeholder = QLabel("Nhập dữ liệu trước khi tạo biểu đồ.")
+        self.chart_placeholder = QLabel("Nhập dữ liệu sinh viên trước khi tạo biểu đồ.")
         self.chart_placeholder.setObjectName("Muted")
         self.chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.chart_placeholder.setMinimumHeight(300)
@@ -636,9 +691,9 @@ class MainWindow(QMainWindow):
         chart_layout.addLayout(self.chart_container)
         layout.addWidget(chart_frame, 1)
 
-        stats_frame, stats_layout = self._surface("Thống kê mô tả")
+        stats_frame, stats_layout = self._surface("Bảng thống kê mô tả đa chỉ số (Descriptive Statistics)")
         self.table_eda_stats = self._create_table()
-        self.table_eda_stats.setMaximumHeight(240)
+        self.table_eda_stats.setMinimumHeight(240)
         stats_layout.addWidget(self.table_eda_stats)
         layout.addWidget(stats_frame)
         self._update_eda_controls()
@@ -757,6 +812,11 @@ class MainWindow(QMainWindow):
         self.btn_train_model = self._primary_button("Chọn dữ liệu lịch sử & huấn luyện XGBoost", self._handle_train_model, "warning")
         self.btn_train_model.setMinimumHeight(40)
         train_actions.addWidget(self.btn_train_model)
+
+        self.btn_train_default_fast = self._primary_button("▶ Huấn luyện nhanh bằng tệp chuẩn HaUI (2 Trụ Cột)", self._handle_train_default_fast, "primary")
+        self.btn_train_default_fast.setMinimumHeight(40)
+        train_actions.addWidget(self.btn_train_default_fast)
+
         train_actions.addStretch(1)
         train_layout.addLayout(train_actions)
         self.lbl_training_status = QLabel("Chưa chạy huấn luyện trong phiên này.")
@@ -765,12 +825,104 @@ class MainWindow(QMainWindow):
         train_layout.addWidget(self.lbl_training_status)
         layout.addWidget(train_frame)
 
-        metrics_frame, metrics_layout = self._surface("Kết quả đánh giá gần nhất")
+        eval_frame, eval_layout = self._surface("Tính toán & Đánh giá toàn bộ thuộc tính độ chính xác của Model")
+        eval_desc = QLabel(
+            "Tính toán đầy đủ mọi thuộc tính độ chính xác (MAE, RMSE, MSE, R², EVS, MAPE, Median AE, Max Error, "
+            "tương quan Pearson & Spearman, tỷ lệ phân tán Spread Ratio, so sánh với Baseline và phân tích sai số theo nhóm điểm)."
+        )
+        eval_desc.setWordWrap(True)
+        eval_desc.setStyleSheet("color:#475467;margin-bottom:8px;")
+        eval_layout.addWidget(eval_desc)
+
+        eval_actions = QHBoxLayout()
+        self.btn_eval_test_file = self._primary_button(
+            "Nạp tệp đánh giá kiểm thử (CSV/Excel)",
+            self._handle_eval_custom_file,
+            "primary",
+        )
+        eval_actions.addWidget(self.btn_eval_test_file)
+
+        self.btn_eval_default = self._primary_button(
+            "Đánh giá trên tệp lịch sử chuẩn",
+            self._handle_eval_default_data,
+            "secondary",
+        )
+        eval_actions.addWidget(self.btn_eval_default)
+
+        self.btn_export_eval = self._primary_button(
+            "Xuất báo cáo độ chính xác (Excel)",
+            self._handle_export_accuracy_report,
+            "secondary",
+        )
+        eval_actions.addWidget(self.btn_export_eval)
+        eval_actions.addStretch(1)
+        eval_layout.addLayout(eval_actions)
+
+        # 5 Metric Cards
+        eval_cards = QGridLayout()
+        eval_cards.setSpacing(12)
+        self.card_eval_mae = _MetricCard("MAE (SAI SỐ TB)", "—", "Càng nhỏ càng tốt", "blue")
+        self.card_eval_rmse = _MetricCard("RMSE (SAI SỐ TOÀN PHƯƠNG)", "—", "Phạt sai số lớn", "blue")
+        self.card_eval_r2 = _MetricCard("R² SCORE (ĐỘ PHÙ HỢP)", "—", "Phương sai giải thích", "green")
+        self.card_eval_spread = _MetricCard("SPREAD RATIO (PHÂN TÁN)", "—", "Tránh co cụm trung bình", "amber")
+        self.card_eval_imp = _MetricCard("CẢI THIỆN SO BASELINE", "—", "So với đoán trung bình", "green")
+        eval_cards.addWidget(self.card_eval_mae, 0, 0)
+        eval_cards.addWidget(self.card_eval_rmse, 0, 1)
+        eval_cards.addWidget(self.card_eval_r2, 0, 2)
+        eval_cards.addWidget(self.card_eval_spread, 0, 3)
+        eval_cards.addWidget(self.card_eval_imp, 0, 4)
+        for col in range(5):
+            eval_cards.setColumnStretch(col, 1)
+        eval_layout.addLayout(eval_cards)
+
+        self.lbl_eval_warning = QLabel("")
+        self.lbl_eval_warning.setWordWrap(True)
+        self.lbl_eval_warning.setStyleSheet("font-weight:600;padding:6px 0;")
+        eval_layout.addWidget(self.lbl_eval_warning)
+
+        # Accuracy Tables
+        table_label_1 = QLabel("Bảng tổng hợp chi tiết tất cả thuộc tính độ chính xác:")
+        table_label_1.setStyleSheet("font-weight:700;margin-top:10px;")
+        eval_layout.addWidget(table_label_1)
+
+        self.table_all_accuracy = QTableWidget()
+        self.table_all_accuracy.setMinimumHeight(320)
+        self.table_all_accuracy.setAlternatingRowColors(True)
+        eval_layout.addWidget(self.table_all_accuracy)
+
+        table_label_2 = QLabel("Độ chính xác và độ lệch theo từng khoảng điểm học lực:")
+        table_label_2.setStyleSheet("font-weight:700;margin-top:12px;")
+        eval_layout.addWidget(table_label_2)
+
+        self.table_band_accuracy = QTableWidget()
+        self.table_band_accuracy.setMinimumHeight(160)
+        self.table_band_accuracy.setAlternatingRowColors(True)
+        eval_layout.addWidget(self.table_band_accuracy)
+
+        # Chart frame
+        chart_title = QLabel("Trực quan hóa độ chính xác mô hình (Thực tế vs Dự đoán & Phân phối phần dư):")
+        chart_title.setStyleSheet("font-weight:700;margin-top:12px;")
+        eval_layout.addWidget(chart_title)
+
+        self.eval_chart_frame = QFrame()
+        self.eval_chart_layout = QVBoxLayout(self.eval_chart_frame)
+        self.eval_chart_layout.setContentsMargins(0, 0, 0, 0)
+        self.eval_chart_placeholder = QLabel("Bấm 'Đánh giá trên tệp lịch sử chuẩn' hoặc nạp tệp kiểm thử để tạo đồ thị.")
+        self.eval_chart_placeholder.setObjectName("Muted")
+        self.eval_chart_placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.eval_chart_placeholder.setMinimumHeight(280)
+        self.eval_chart_layout.addWidget(self.eval_chart_placeholder)
+        eval_layout.addWidget(self.eval_chart_frame)
+
+        layout.addWidget(eval_frame)
+
+        # Legacy summary label
+        legacy_frame, legacy_layout = self._surface("Thông tin huấn luyện kỹ thuật")
         self.lbl_model_metrics = QLabel("Chưa có kết quả huấn luyện trong phiên này.")
         self.lbl_model_metrics.setWordWrap(True)
         self.lbl_model_metrics.setObjectName("Muted")
-        metrics_layout.addWidget(self.lbl_model_metrics)
-        layout.addWidget(metrics_frame)
+        legacy_layout.addWidget(self.lbl_model_metrics)
+        layout.addWidget(legacy_frame)
 
     def _build_uci_benchmark_page(self, body: QWidget, layout: QVBoxLayout) -> None:
         intro_frame, intro_layout = self._surface("🧪 Thực nghiệm trên bộ dữ liệu UCI")
@@ -802,6 +954,15 @@ class MainWindow(QMainWindow):
         )
         self.btn_uci_train.setMinimumHeight(40)
         subject_row.addWidget(self.btn_uci_train)
+
+        self.btn_uci_register = self._primary_button(
+            "🎓 Đăng ký mô hình quan hệ UCI làm mô hình chính thức",
+            self._handle_register_uci_as_active_model,
+            "success",
+        )
+        self.btn_uci_register.setMinimumHeight(40)
+        subject_row.addWidget(self.btn_uci_register)
+
         intro_layout.addLayout(subject_row)
 
         self.uci_progress = QProgressBar()
@@ -975,8 +1136,98 @@ class MainWindow(QMainWindow):
     def _on_uci_training_finished(self) -> None:
         self.uci_progress.setVisible(False)
         self.btn_uci_train.setEnabled(True)
+        if hasattr(self, "btn_uci_register"):
+            self.btn_uci_register.setEnabled(True)
         self.cb_uci_subject.setEnabled(True)
         self._uci_training_worker = None
+
+    def _handle_register_uci_as_active_model(self) -> None:
+        if self._uci_transfer_worker is not None and self._uci_transfer_worker.isRunning():
+            return
+        subject = self.cb_uci_subject.currentData() or "mat"
+        subject_label = "Toán học" if subject == "mat" else "Tiếng Bồ Đào Nha"
+        self.btn_uci_train.setEnabled(False)
+        if hasattr(self, "btn_uci_register"):
+            self.btn_uci_register.setEnabled(False)
+        self.cb_uci_subject.setEnabled(False)
+        self.uci_progress.setVisible(True)
+        self.lbl_uci_status.setText(
+            f"Đang học chuyển giao quan hệ học thuật từ dữ liệu UCI ({subject_label}) và đăng ký mô hình vào kho..."
+        )
+        self._uci_transfer_worker = _UciTransferWorker(subject, self)
+        self._uci_transfer_worker.succeeded.connect(self._on_uci_transfer_succeeded)
+        self._uci_transfer_worker.failed.connect(self._on_uci_transfer_failed)
+        self._uci_transfer_worker.finished.connect(self._on_uci_transfer_finished)
+        self._uci_transfer_worker.start()
+
+    def _on_uci_transfer_succeeded(self, result: dict[str, Any]) -> None:
+        eval_res = result.get("eval_result")
+        subject = result.get("subject", "mat")
+        sub_name = "Toán học" if subject == "mat" else "Tiếng Bồ Đào Nha"
+        self.lbl_uci_status.setText(
+            f"Đã đăng ký thành công mô hình quan hệ từ tập UCI ({sub_name}) vào kho mô hình HaUI."
+        )
+        self._update_all_status()
+        self._refresh_model_page_info()
+        if eval_res is not None:
+            self._display_evaluation_result(eval_res)
+        QMessageBox.information(
+            self,
+            "Đăng ký mô hình quan hệ UCI thành công",
+            f"Mô hình học chuyển giao quan hệ từ dữ liệu chuẩn quốc tế UCI ({sub_name}) đã được đăng ký thành công làm mô hình dự đoán chính thức cho HaUI!\n\n"
+            f"R² Score: {eval_res.r2:.3f} | MAE: {eval_res.mae:.3f} | Tỷ lệ phân tán: {eval_res.spread_ratio:.1%}\n\n"
+            "Hệ thống đã tự động chuyển sang sử dụng mô hình này để dự đoán điểm thi và đánh giá nguy cơ học vụ cho sinh viên.",
+        )
+        self._switch_page(5)
+
+    def _on_uci_transfer_failed(self, message: str) -> None:
+        self.lbl_uci_status.setText("Đăng ký mô hình quan hệ UCI thất bại. Xem thông báo lỗi.")
+        QMessageBox.critical(self, "Đăng ký mô hình UCI thất bại", message)
+
+    def _on_uci_transfer_finished(self) -> None:
+        self.btn_uci_train.setEnabled(True)
+        if hasattr(self, "btn_uci_register"):
+            self.btn_uci_register.setEnabled(True)
+        self.cb_uci_subject.setEnabled(True)
+        self.uci_progress.setVisible(False)
+        self._uci_transfer_worker = None
+
+    def _handle_train_default_fast(self) -> None:
+        if self._training_worker is not None and self._training_worker.isRunning():
+            QMessageBox.information(self, "Đang huấn luyện", "Một tác vụ huấn luyện đang chạy.")
+            return
+
+        data_path = Path("data/du_lieu_lich_su_huan_luyen_chuan_hoa.csv")
+        if not data_path.exists():
+            QMessageBox.warning(self, "Không tìm thấy dữ liệu", "Không tìm thấy tệp dữ liệu lịch sử chuẩn hóa trong thư mục data/.")
+            return
+
+        self.training_file_path = str(data_path)
+        try:
+            from haui_student_prediction.data.training_dataset import (
+                TARGET_COLUMN,
+                load_historical_training_dataset,
+            )
+            training_data = load_historical_training_dataset(str(data_path))
+            target = pd.to_numeric(training_data[TARGET_COLUMN], errors="coerce")
+            valid_rows = int((target.notna() & np.isfinite(target.astype(float))).sum())
+        except Exception as exc:
+            QMessageBox.critical(self, "Lỗi đọc dữ liệu lịch sử", self._user_error(exc))
+            return
+
+        self.btn_train_model.setEnabled(False)
+        if hasattr(self, "btn_train_default_fast"):
+            self.btn_train_default_fast.setEnabled(False)
+        self.btn_train_from_prediction.setEnabled(False)
+        self.training_progress.setVisible(True)
+        self.lbl_training_status.setText(
+            f"Đang nạp {valid_rows:,} nhãn từ {data_path.name}; đang chia tập và huấn luyện mô hình 2 Trụ Cột..."
+        )
+        self._training_worker = _TrainingWorker(training_data, self)
+        self._training_worker.succeeded.connect(self._on_training_succeeded)
+        self._training_worker.failed.connect(self._on_training_failed)
+        self._training_worker.finished.connect(self._on_training_finished)
+        self._training_worker.start()
 
     def _refresh_uci_benchmark_results(self) -> None:
         if not hasattr(self, "cb_uci_subject"):
@@ -1448,6 +1699,10 @@ class MainWindow(QMainWindow):
         )
 
     def _display_column_name(self, column: Any) -> str:
+        from haui_student_prediction.data.column_mapping import get_column_vietnamese_label
+        mapped = get_column_vietnamese_label(str(column))
+        if mapped != str(column):
+            return mapped
         labels = {
             "student_id": "Mã sinh viên",
             "full_name": "Họ và tên",
@@ -1554,6 +1809,8 @@ class MainWindow(QMainWindow):
         table.setSortingEnabled(True)
 
     def _refresh_eda_options(self) -> None:
+        from haui_student_prediction.data.column_mapping import get_column_vietnamese_label
+
         dataframe = self.current_df
         selectors = [self.cb_eda_col, self.cb_eda_category, self.cb_eda_x, self.cb_eda_y]
         for selector in selectors:
@@ -1577,10 +1834,13 @@ class MainWindow(QMainWindow):
                 )
                 and dataframe[column].nunique(dropna=True) > 1
             ]
-            self.cb_eda_col.addItems(numeric_columns + categorical_columns)
-            self.cb_eda_category.addItems(categorical_columns)
-            self.cb_eda_x.addItems(numeric_columns)
-            self.cb_eda_y.addItems(numeric_columns)
+            for col in (numeric_columns + categorical_columns):
+                self.cb_eda_col.addItem(get_column_vietnamese_label(col), col)
+            for col in categorical_columns:
+                self.cb_eda_category.addItem(get_column_vietnamese_label(col), col)
+            for col in numeric_columns:
+                self.cb_eda_x.addItem(get_column_vietnamese_label(col), col)
+                self.cb_eda_y.addItem(get_column_vietnamese_label(col), col)
         for selector in selectors:
             selector.blockSignals(False)
         self._update_eda_controls()
@@ -1590,20 +1850,24 @@ class MainWindow(QMainWindow):
         if not hasattr(self, "cb_chart_type"):
             return
         kind = self.cb_chart_type.currentData()
-        self.cb_eda_category.setEnabled(kind == "boxplot")
+        self.cb_eda_category.setEnabled(kind in {"boxplot", "violin", "kde"})
         self.cb_eda_x.setEnabled(kind == "scatter")
         self.cb_eda_y.setEnabled(kind == "scatter")
-        self.cb_eda_col.setEnabled(kind in {"histogram", "count", "boxplot"})
+        self.cb_eda_col.setEnabled(kind in {"histogram", "count", "boxplot", "violin", "kde"})
         if kind == "count":
-            self.btn_plot.setText("Tạo biểu đồ đếm")
+            self.btn_plot.setText("Tạo biểu đồ đếm số lượng")
         elif kind == "boxplot":
-            self.btn_plot.setText("Tạo boxplot")
+            self.btn_plot.setText("Tạo biểu đồ Boxplot")
+        elif kind == "violin":
+            self.btn_plot.setText("Tạo biểu đồ Violin")
+        elif kind == "kde":
+            self.btn_plot.setText("Tạo biểu đồ mật độ KDE")
         elif kind == "scatter":
-            self.btn_plot.setText("Tạo scatter")
+            self.btn_plot.setText("Tạo biểu đồ Scatter plot")
         elif kind == "heatmap":
-            self.btn_plot.setText("Tạo heatmap")
+            self.btn_plot.setText("Tạo Heatmap tương quan")
         else:
-            self.btn_plot.setText("Tạo histogram")
+            self.btn_plot.setText("Tạo biểu đồ Histogram")
 
     def _handle_plot(self) -> None:
         if self.current_df is None or self.current_df.empty:
@@ -1612,41 +1876,40 @@ class MainWindow(QMainWindow):
         kind = self.cb_chart_type.currentData()
         figure = None
         try:
+            column = self.cb_eda_col.currentData() or self.cb_eda_col.currentText()
+            category = self.cb_eda_category.currentData() or self.cb_eda_category.currentText()
+            x_column = self.cb_eda_x.currentData() or self.cb_eda_x.currentText()
+            y_column = self.cb_eda_y.currentData() or self.cb_eda_y.currentText()
+
             if kind == "histogram":
-                column = self.cb_eda_col.currentText()
                 if not column:
                     raise ValueError("Chọn một biến số để tạo histogram.")
                 figure = self.chart_service.dist_plots.plot_histogram(self.current_df, column)
+            elif kind == "kde":
+                if not column:
+                    raise ValueError("Chọn một biến số để so sánh mật độ KDE.")
+                default_cat = category or ("major" if "major" in self.current_df.columns else self.current_df.columns[0])
+                figure = self.chart_service.dist_plots.plot_kde_comparison(self.current_df, column, default_cat)
             elif kind == "count":
-                column = self.cb_eda_col.currentText()
                 if not column:
                     raise ValueError("Chọn một biến để tạo biểu đồ đếm.")
                 figure = self.chart_service.dist_plots.plot_count(self.current_df, column)
             elif kind == "boxplot":
-                category = self.cb_eda_category.currentText()
-                numeric = self.cb_eda_col.currentText()
-                if not category or not numeric:
+                if not category or not column:
                     raise ValueError("Chọn biến số và biến nhóm để tạo boxplot.")
-                figure = self.chart_service.relationship_plots.plot_boxplot(self.current_df, category, numeric)
+                figure = self.chart_service.relationship_plots.plot_boxplot(self.current_df, category, column)
+            elif kind == "violin":
+                if not category or not column:
+                    raise ValueError("Chọn biến số và biến nhóm để tạo violin plot.")
+                figure = self.chart_service.dist_plots.plot_violin(self.current_df, category, column)
             elif kind == "scatter":
-                x_column = self.cb_eda_x.currentText()
-                y_column = self.cb_eda_y.currentText()
                 if not x_column or not y_column:
                     raise ValueError("Chọn đủ biến X và biến Y.")
                 if x_column == y_column:
                     raise ValueError("Biến X và Y phải khác nhau.")
                 figure = self.chart_service.relationship_plots.plot_scatter(self.current_df, x_column, y_column)
             elif kind == "heatmap":
-                matrix = self.chart_service.statistics.get_correlation_matrix(self.current_df)
-                if matrix.empty:
-                    raise ValueError("Bộ dữ liệu không có đủ biến số để tạo biểu đồ tương quan.")
-                import matplotlib.pyplot as plt
-                import seaborn as sns
-
-                figure, axis = plt.subplots(figsize=(9, 6))
-                sns.heatmap(matrix, annot=matrix.shape[0] <= 12, cmap="Blues", vmin=-1, vmax=1, center=0, ax=axis)
-                axis.set_title("Ma trận tương quan")
-                figure.tight_layout()
+                figure = self.chart_service.relationship_plots.plot_correlation_heatmap(self.current_df)
             else:
                 raise ValueError("Loại biểu đồ không được hỗ trợ.")
             self._display_chart(figure)
@@ -1692,19 +1955,17 @@ class MainWindow(QMainWindow):
             self.table_eda_stats.clear()
             self.table_eda_stats.setRowCount(0)
             self.table_eda_stats.setColumnCount(0)
+            if hasattr(self, "lbl_eda_insights"):
+                self.lbl_eda_insights.setText("Chưa có dữ liệu sinh viên trong phiên.")
             return
         try:
-            summary = self.chart_service.statistics.get_numeric_summary(self.current_df)
-            records = []
-            for column, values in summary.items():
-                if column in {"student_id", "full_name"}:
-                    continue
-                if not isinstance(values, dict):
-                    continue
-                for metric, value in values.items():
-                    records.append({"Biến": column, "Thống kê": metric, "Giá trị": value})
-            summary_df = pd.DataFrame(records)
-            self._populate_table(self.table_eda_stats, summary_df, max_rows=300)
+            detailed_summary = self.chart_service.statistics.get_detailed_dataframe_summary(self.current_df)
+            self._populate_table(self.table_eda_stats, detailed_summary, max_rows=300)
+
+            if hasattr(self, "lbl_eda_insights"):
+                insights = self.chart_service.statistics.generate_pedagogical_insights(self.current_df)
+                formatted = "• " + "\n• ".join(insights)
+                self.lbl_eda_insights.setText(formatted)
         except Exception as exc:
             logging.exception("EDA summary failed")
             self.table_eda_stats.clear()
@@ -1816,7 +2077,8 @@ class MainWindow(QMainWindow):
             f"tập kiểm thử: {result['test_rows']:,} dòng. Cấu hình được chọn: {metrics.selected_candidate}."
         )
         self.lbl_model_metrics.setText(
-            f"Test MAE: {mae}    RMSE: {rmse}    R²: {r2}\n"
+            (f"⚠ CẢNH BÁO DỮ LIỆU: {metrics.data_signal_warning}\n" if getattr(metrics, "data_signal_warning", "") else "")
+            + f"Test MAE: {mae}    RMSE: {rmse}    R²: {r2}    R² CV: {self._format_metric(getattr(metrics, 'cv_r2_mean', float('nan')))}\n"
             f"5-fold {metrics.cv_strategy} MAE: {cv_mae} ± {cv_mae_std}    Baseline MAE: {baseline_mae}\n"
             f"Khoảng điểm thực tế: {actual_range}    Khoảng dự đoán: {predicted_range}\n"
             f"Std dự đoán / Std thực tế: {spread_ratio}    Số điểm dự đoán khác nhau: {metrics.prediction_unique_count}\n"
@@ -1827,8 +2089,21 @@ class MainWindow(QMainWindow):
             f"Mã nhận diện bộ dữ liệu: {result['dataset_hash']}\n"
             f"Các đặc trưng: {', '.join(result['features'])}"
         )
+        eval_result = result.get("eval_result")
+        if eval_result is not None:
+            self._display_evaluation_result(eval_result)
+
         self._update_all_status()
         self._refresh_model_page_info()
+        signal_warning = getattr(metrics, "data_signal_warning", "")
+        if signal_warning:
+            QMessageBox.warning(
+                self,
+                "Dữ liệu huấn luyện không có tín hiệu dự đoán",
+                f"Mô hình {result['version']} đã được lưu, nhưng:\n\n{signal_warning}\n\n"
+                f"Test MAE: {mae} | Baseline MAE: {baseline_mae} | R²: {r2}",
+            )
+            return
         QMessageBox.information(
             self,
             "Huấn luyện hoàn tất",
@@ -1851,6 +2126,8 @@ class MainWindow(QMainWindow):
 
     def _on_training_finished(self) -> None:
         self.btn_train_model.setEnabled(True)
+        if hasattr(self, "btn_train_default_fast"):
+            self.btn_train_default_fast.setEnabled(True)
         self.btn_train_from_prediction.setEnabled(True)
         self.training_progress.setVisible(False)
         self._training_worker = None
@@ -2086,6 +2363,16 @@ class MainWindow(QMainWindow):
                 "green" if ready else "violet",
             )
         self._update_global_badges()
+        if ready and getattr(self, "_latest_eval_result", None) is None:
+            self._auto_load_initial_evaluation()
+
+    def _auto_load_initial_evaluation(self) -> None:
+        try:
+            data_path = Path("data/du_lieu_lich_su_huan_luyen_chuan_hoa.csv")
+            if data_path.exists() and self._is_model_ready():
+                self._evaluate_dataset_path(str(data_path), quiet=True)
+        except Exception:
+            logging.debug("Could not auto load initial evaluation", exc_info=True)
 
     def _refresh_model_page_info(self) -> None:
         self._update_model_status()
@@ -2241,6 +2528,142 @@ class MainWindow(QMainWindow):
     def _user_error(self, exc: Exception) -> str:
         message = str(exc).strip()
         return message if message else exc.__class__.__name__
+
+    def _handle_eval_custom_file(self) -> None:
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Chọn tệp kiểm thử để tính toán độ chính xác",
+            "",
+            "Dữ liệu CSV/Excel (*.csv *.xlsx *.xls);;CSV (*.csv);;Excel (*.xlsx *.xls)",
+        )
+        if not file_path:
+            return
+        self._evaluate_dataset_path(file_path)
+
+    def _handle_eval_default_data(self) -> None:
+        data_path = Path("data/du_lieu_lich_su_huan_luyen_chuan_hoa.csv")
+        if not data_path.exists():
+            QMessageBox.warning(self, "Không tìm thấy dữ liệu", "Không tìm thấy tệp dữ liệu lịch sử chuẩn trong thư mục data/.")
+            return
+        self._evaluate_dataset_path(str(data_path))
+
+    def _evaluate_dataset_path(self, file_path: str, quiet: bool = False) -> None:
+        try:
+            if not self._is_model_ready():
+                raise RuntimeError("Mô hình chưa sẵn sàng. Hãy huấn luyện mô hình trước khi đánh giá.")
+
+            from haui_student_prediction.app_config import load_config
+            from haui_student_prediction.ml.model_registry import ModelRegistry, ACTIVE_MODEL_VERSION
+            from haui_student_prediction.data.training_dataset import load_historical_training_dataset, TARGET_COLUMN
+            from haui_student_prediction.features.feature_builder import FeatureBuilder
+            from haui_student_prediction.features.feature_contract import FeatureContract
+
+            registry = getattr(self.prediction_service, "registry", None)
+            if registry is None or not registry.has_model(ACTIVE_MODEL_VERSION):
+                config = load_config()
+                registry = ModelRegistry(str(config.model_registry_path), str(config.model_artifacts_dir))
+            pipeline, metadata = registry.load_model(ACTIVE_MODEL_VERSION)
+            contract = FeatureContract(**metadata["features"])
+
+            df_test = load_historical_training_dataset(file_path)
+            builder = FeatureBuilder(contract)
+            X = builder.extract_features(df_test, is_training=False)
+            y_true = df_test[TARGET_COLUMN].values
+            y_pred = pipeline.predict(X)
+
+            sample_ids = df_test["student_id"].astype(str).tolist() if "student_id" in df_test.columns else None
+            res = compute_all_accuracy_metrics(y_true, y_pred, sample_ids=sample_ids)
+            self._display_evaluation_result(res)
+            if not quiet:
+                QMessageBox.information(
+                self,
+                "Đánh giá hoàn tất",
+                f"Đã tính toán thành công toàn bộ thuộc tính độ chính xác trên {res.total_samples:,} bản ghi:\n\n"
+                f"MAE: {res.mae:.4f} | RMSE: {res.rmse:.4f} | R²: {res.r2:.4f} | Spread: {res.spread_ratio:.2%}",
+            )
+        except Exception as exc:
+            logging.exception("Evaluation failed")
+            QMessageBox.critical(self, "Lỗi đánh giá độ chính xác", self._user_error(exc))
+
+    def _display_evaluation_result(self, res: AccuracyEvaluationResult) -> None:
+        self._latest_eval_result = res
+
+        # Update metric cards
+        self.card_eval_mae.set_value(f"{res.mae:.3f}", f"Baseline: {res.baseline_mae:.3f}", "green" if res.beats_baseline else "amber")
+        self.card_eval_rmse.set_value(f"{res.rmse:.3f}", f"MSE: {res.mse:.3f}", "blue")
+        self.card_eval_r2.set_value(f"{res.r2:.3f}", f"EVS: {res.evs:.3f}", "green" if res.r2 > 0 else "red")
+        self.card_eval_spread.set_value(f"{res.spread_ratio * 100:.1f}%", f"{res.unique_predictions} điểm khác nhau", "green" if res.spread_ratio > 0.5 else "red")
+        self.card_eval_imp.set_value(f"{res.mae_improvement_pct:+.1f}%", "Vượt baseline" if res.beats_baseline else "Chưa vượt", "green" if res.beats_baseline else "amber")
+
+        # Warning
+        self.lbl_eval_warning.setText(res.clustering_warning)
+        if "CẢNH BÁO" in res.clustering_warning:
+            self.lbl_eval_warning.setStyleSheet("color:#B42318;font-weight:700;padding:6px 0;")
+        else:
+            self.lbl_eval_warning.setStyleSheet("color:#027A48;font-weight:700;padding:6px 0;")
+
+        # Populate tables
+        self._populate_table(self.table_all_accuracy, res.all_metrics_table, max_rows=50)
+        self._populate_table(self.table_band_accuracy, res.grade_band_metrics, max_rows=20)
+
+        # Plot charts
+        self._clear_layout(self.eval_chart_layout)
+        import matplotlib.pyplot as plt
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.5))
+
+        y_true = res.predictions_df["actual_score"]
+        y_pred = res.predictions_df["predicted_score"]
+        residuals = res.predictions_df["residual"]
+
+        # Scatter
+        ax1.scatter(y_true, y_pred, alpha=0.35, s=25, color="#1D4ED8", edgecolors="none")
+        ax1.plot([0, 10], [0, 10], "r--", lw=1.5, label="y = x (Lý tưởng)")
+        ax1.set_xlim(0, 10.5)
+        ax1.set_ylim(0, 10.5)
+        ax1.set_xlabel("Điểm thực tế (Actual)")
+        ax1.set_ylabel("Điểm dự đoán (Predicted)")
+        ax1.set_title(f"Thực tế vs Dự đoán\nMAE: {res.mae:.3f} | R²: {res.r2:.3f}", fontsize=10)
+        ax1.legend(loc="upper left", fontsize=8)
+        ax1.grid(True, linestyle=":", alpha=0.6)
+
+        # Residual distribution
+        ax2.hist(residuals, bins=25, color="#059669", alpha=0.75, edgecolor="white")
+        ax2.axvline(0, color="red", linestyle="--", lw=1.5, label="Sai số = 0")
+        ax2.set_xlabel("Phần dư (Actual - Predicted)")
+        ax2.set_ylabel("Số lượng mẫu")
+        ax2.set_title(f"Phân phối sai số phần dư\nMean: {np.mean(residuals):+.3f} | Std: {np.std(residuals):.3f}", fontsize=10)
+        ax2.legend(loc="upper left", fontsize=8)
+        ax2.grid(True, linestyle=":", alpha=0.6)
+
+        fig.tight_layout()
+        canvas = FigureCanvas(fig)
+        toolbar = NavigationToolbar(canvas, self)
+        self.eval_chart_layout.addWidget(toolbar)
+        self.eval_chart_layout.addWidget(canvas)
+
+    def _handle_export_accuracy_report(self) -> None:
+        if self._latest_eval_result is None:
+            QMessageBox.information(self, "Chưa có kết quả", "Hãy bấm tính toán hoặc đánh giá độ chính xác trước khi xuất.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Xuất báo cáo độ chính xác mô hình",
+            "bao_cao_do_chinh_xac_model.xlsx",
+            "Excel (*.xlsx);;CSV (*.csv)",
+        )
+        if not file_path:
+            return
+
+        try:
+            with pd.ExcelWriter(file_path, engine="openpyxl") as writer:
+                self._latest_eval_result.all_metrics_table.to_excel(writer, sheet_name="Thuộc tính độ chính xác", index=False)
+                self._latest_eval_result.grade_band_metrics.to_excel(writer, sheet_name="Theo nhóm điểm", index=False)
+                self._latest_eval_result.predictions_df.to_excel(writer, sheet_name="Chi tiết dự đoán & phần dư", index=False)
+            QMessageBox.information(self, "Xuất thành công", f"Đã lưu báo cáo độ chính xác tại:\n{file_path}")
+        except Exception as exc:
+            logging.exception("Accuracy report export failed")
+            QMessageBox.critical(self, "Lỗi xuất báo cáo", self._user_error(exc))
 
     def closeEvent(self, a0: QCloseEvent) -> None:
         active_workers = (

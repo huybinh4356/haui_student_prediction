@@ -32,6 +32,10 @@ class ModelMetrics:
     selected_candidate: str = ""
     cv_strategy: str = "KFold"
     feature_effects: dict[str, dict[str, float]] = field(default_factory=dict)
+    cv_r2_mean: float = float("nan")
+    cv_spread_ratio: float = float("nan")
+    max_abs_feature_correlation: float = float("nan")
+    data_signal_warning: str = ""
 
 
 def train_and_evaluate(

@@ -1,1 +1,121 @@
-{}
+{
+    "xgboost-2.0.0": {
+        "version": "xgboost-2.0.0",
+        "dataset_hash": "3aa04a0d5c5ce25a102c7448212658510395ee8ff74290daf207e8c134d88c95",
+        "metrics": {
+            "mae": 1.5250842054367064,
+            "rmse": 1.7524628776811941,
+            "r2": -0.002927833874401653
+        },
+        "features": {
+            "numerical_features": [
+                "tx1_score",
+                "midterm_score",
+                "absence_percentage",
+                "lms_learning_percentage",
+                "interaction_score",
+                "stress_score",
+                "motivation_score"
+            ],
+            "categorical_features": [
+                "works_part_time",
+                "major",
+                "course_id"
+            ],
+            "target_column": "target_final_exam_score"
+        },
+        "artifact_filename": "model_vxgboost-2.0.0.joblib"
+    },
+    "xgboost-2.2.0": {
+        "version": "xgboost-2.2.0",
+        "dataset_hash": "f893cf56541e6ede007782a5554bb629d65ac801f9f59ca67862c33fc163723a",
+        "metrics": {
+            "mae": 0.18731024432640808,
+            "rmse": 0.3291426354471499,
+            "r2": 0.821399785143563,
+            "cv_mae_mean": 0.20736934698270276,
+            "cv_mae_std": 0.02374274335835443,
+            "cv_rmse_mean": 0.3244584248035812,
+            "cv_rmse_std": 0.07054846073654286,
+            "baseline_mae": 0.5878464502741958,
+            "baseline_rmse": 0.7922317259371716,
+            "actual_mean": 3.093846153846154,
+            "actual_std": 0.7788308640474513,
+            "actual_min": 0.0,
+            "actual_max": 4.8,
+            "predicted_mean": 3.114733746762459,
+            "predicted_std": 0.7471646622383153,
+            "predicted_min": -0.05512745678424835,
+            "predicted_max": 4.472529888153076,
+            "prediction_spread_ratio": 0.9593413624563206,
+            "prediction_unique_count": 123,
+            "beats_baseline": true,
+            "selected_candidate": "moderate_depth4",
+            "cv_strategy": "KFold",
+            "feature_effects": {
+                "tx1_score": {
+                    "mean_absolute_points": 0.12683389510045975,
+                    "mean_signed_points": 0.044742315068232036
+                },
+                "midterm_score": {
+                    "mean_absolute_points": 0.4812387555837631,
+                    "mean_signed_points": 0.10889325096057012
+                },
+                "absence_percentage": {
+                    "mean_absolute_points": 0.050784403211078966,
+                    "mean_signed_points": 0.008232451885795364
+                },
+                "lms_learning_percentage": {
+                    "mean_absolute_points": 0.021411063033156097,
+                    "mean_signed_points": 0.0046670780212690055
+                },
+                "interaction_score": {
+                    "mean_absolute_points": 0.0,
+                    "mean_signed_points": 0.0
+                },
+                "stress_score": {
+                    "mean_absolute_points": 0.0,
+                    "mean_signed_points": 0.0
+                },
+                "motivation_score": {
+                    "mean_absolute_points": 0.006234904623908313,
+                    "mean_signed_points": -0.0019399131906818814
+                },
+                "works_part_time": {
+                    "mean_absolute_points": 0.0,
+                    "mean_signed_points": 0.0
+                },
+                "major": {
+                    "mean_absolute_points": 0.0,
+                    "mean_signed_points": 0.0
+                },
+                "course_id": {
+                    "mean_absolute_points": 0.0,
+                    "mean_signed_points": 0.0
+                }
+            },
+            "cv_r2_mean": 0.8331948679550343,
+            "cv_spread_ratio": 0.940180030773126,
+            "max_abs_feature_correlation": 0.9105438502889859,
+            "data_signal_warning": ""
+        },
+        "features": {
+            "numerical_features": [
+                "tx1_score",
+                "midterm_score",
+                "absence_percentage",
+                "lms_learning_percentage",
+                "interaction_score",
+                "stress_score",
+                "motivation_score"
+            ],
+            "categorical_features": [
+                "works_part_time",
+                "major",
+                "course_id"
+            ],
+            "target_column": "target_final_exam_score"
+        },
+        "artifact_filename": "model_vxgboost-2.2.0.joblib"
+    }
+}

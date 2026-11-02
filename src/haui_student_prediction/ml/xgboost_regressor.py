@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.dummy import DummyRegressor
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.model_selection import GroupKFold, KFold, cross_validate
+from sklearn.model_selection import GroupKFold, KFold
 from sklearn.pipeline import Pipeline
 from xgboost import XGBRegressor
 
@@ -18,55 +18,92 @@ from haui_student_prediction.ml.train_regressor import ModelMetrics
 
 XGBOOST_MODEL_VERSION = ACTIVE_MODEL_VERSION
 
+# ---------------------------------------------------------------------------
+# Candidate hyper-parameter configurations
+#
+# The previous set was **over-regularised**: every candidate used very shallow
+# trees (max_depth 2-3), very high L2 (reg_lambda 2-8), and a tiny learning
+# rate — which forced the model to predict near the training-set mean.
+#
+# The new set keeps a few conservative candidates (to avoid over-fitting on
+# small datasets) but adds candidates that are **flexible enough** to capture
+# real grade variation.
+# ---------------------------------------------------------------------------
 CANDIDATE_CONFIGS = {
-    "conservative": {
-        "n_estimators": 120,
-        "learning_rate": 0.03,
-        "max_depth": 2,
-        "min_child_weight": 3,
-        "reg_alpha": 0.1,
-        "reg_lambda": 5.0,
-    },
-    "shallow_more_trees": {
-        "n_estimators": 360,
-        "learning_rate": 0.025,
-        "max_depth": 2,
+    # --- Flexible candidates (address the 6-7 clustering problem) -----------
+    "flexible_deep": {
+        "n_estimators": 500,
+        "learning_rate": 0.05,
+        "max_depth": 6,
         "min_child_weight": 1,
+        "gamma": 0.0,
         "reg_alpha": 0.0,
-        "reg_lambda": 3.0,
+        "reg_lambda": 1.0,
     },
-    "balanced": {
-        "n_estimators": 250,
-        "learning_rate": 0.03,
-        "max_depth": 3,
+    "flexible_mid": {
+        "n_estimators": 400,
+        "learning_rate": 0.08,
+        "max_depth": 5,
         "min_child_weight": 2,
-        "reg_alpha": 0.05,
-        "reg_lambda": 2.0,
+        "gamma": 0.0,
+        "reg_alpha": 0.0,
+        "reg_lambda": 1.0,
     },
-    "regularized_depth3": {
-        "n_estimators": 240,
-        "learning_rate": 0.04,
-        "max_depth": 3,
-        "min_child_weight": 4,
-        "gamma": 0.05,
-        "reg_alpha": 0.2,
-        "reg_lambda": 8.0,
-    },
-    "more_flexible": {
+    "balanced_v2": {
         "n_estimators": 300,
-        "learning_rate": 0.04,
+        "learning_rate": 0.1,
         "max_depth": 4,
         "min_child_weight": 1,
-        "reg_alpha": 0.0,
+        "gamma": 0.0,
+        "reg_alpha": 0.01,
+        "reg_lambda": 1.0,
+    },
+    "deep_low_lr": {
+        "n_estimators": 800,
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "min_child_weight": 3,
+        "gamma": 0.1,
+        "reg_alpha": 0.01,
+        "reg_lambda": 1.5,
+    },
+    # --- Moderate candidates (good general-purpose balance) ------------------
+    "moderate_depth4": {
+        "n_estimators": 400,
+        "learning_rate": 0.05,
+        "max_depth": 4,
+        "min_child_weight": 2,
+        "gamma": 0.05,
+        "reg_alpha": 0.05,
         "reg_lambda": 2.0,
     },
-    "faster_learning": {
-        "n_estimators": 180,
+    "moderate_depth5": {
+        "n_estimators": 350,
         "learning_rate": 0.06,
+        "max_depth": 5,
+        "min_child_weight": 3,
+        "gamma": 0.1,
+        "reg_alpha": 0.1,
+        "reg_lambda": 2.0,
+    },
+    # --- Conservative candidates (safer for very small datasets) -------------
+    "conservative": {
+        "n_estimators": 200,
+        "learning_rate": 0.05,
         "max_depth": 3,
-        "min_child_weight": 2,
-        "reg_alpha": 0.05,
+        "min_child_weight": 3,
+        "gamma": 0.1,
+        "reg_alpha": 0.1,
         "reg_lambda": 3.0,
+    },
+    "conservative_shallow": {
+        "n_estimators": 300,
+        "learning_rate": 0.03,
+        "max_depth": 2,
+        "min_child_weight": 5,
+        "gamma": 0.2,
+        "reg_alpha": 0.1,
+        "reg_lambda": 5.0,
     },
 }
 
@@ -75,14 +112,19 @@ def _new_pipeline(
     contract: FeatureContract,
     model_parameters: dict | None = None,
 ) -> Pipeline:
+    # Tree-based models do NOT need StandardScaler.  Passing
+    # scale_numeric=False (default) removes the scaler so that
+    # regularisation parameters (reg_lambda, reg_alpha) work on raw
+    # feature magnitudes rather than z-scored values — which previously
+    # caused extreme shrinkage toward the mean.
     preprocessor = build_preprocessing_pipeline(
         contract.numerical_features,
         contract.categorical_features,
     )
     parameters = {
         "objective": "reg:squarederror",
-        "subsample": 0.9,
-        "colsample_bytree": 0.9,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
         "random_state": 42,
         "n_jobs": 1,
         "tree_method": "hist",
@@ -164,38 +206,64 @@ def _cross_validate_candidates(
         splitter = KFold(n_splits=5, shuffle=True, random_state=42)
         cv_strategy = "KFold"
 
-    scoring = {
-        "mae": "neg_mean_absolute_error",
-        "rmse": "neg_root_mean_squared_error",
-    }
+    y_values = y_train.to_numpy(dtype=float)
+    y_train_std = float(np.std(y_values))
+    folds = list(splitter.split(X_train, y_train, groups=group_values))
     candidate_results = []
 
     for candidate_name, parameters in CANDIDATE_CONFIGS.items():
-        pipeline = _new_pipeline(contract, parameters)
-        scores = cross_validate(
-            pipeline,
-            X_train,
-            y_train,
-            cv=splitter,
-            groups=group_values,
-            scoring=scoring,
-            n_jobs=1,
-            return_train_score=False,
-            error_score="raise",
-        )
-        mae_scores = -np.asarray(scores["test_mae"], dtype=float)
-        rmse_scores = -np.asarray(scores["test_rmse"], dtype=float)
+        # True out-of-fold (OOF) predictions: every training row is predicted
+        # by a model that never saw it.  Spread measured on OOF predictions
+        # reflects real generalisation; in-sample spread would reward models
+        # that simply memorise noise.
+        oof_predictions = np.empty(len(y_values), dtype=float)
+        fold_mae = []
+        fold_rmse = []
+        for fit_index, validation_index in folds:
+            pipeline = _new_pipeline(contract, parameters)
+            pipeline.fit(X_train.iloc[fit_index], y_train.iloc[fit_index])
+            fold_predictions = np.asarray(
+                pipeline.predict(X_train.iloc[validation_index]), dtype=float
+            )
+            oof_predictions[validation_index] = fold_predictions
+            fold_truth = y_values[validation_index]
+            fold_mae.append(float(mean_absolute_error(fold_truth, fold_predictions)))
+            fold_rmse.append(float(np.sqrt(mean_squared_error(fold_truth, fold_predictions))))
+
+        oof_std = float(np.std(oof_predictions))
         summary = {
-            "cv_mae_mean": float(np.mean(mae_scores)),
-            "cv_mae_std": float(np.std(mae_scores, ddof=1)),
-            "cv_rmse_mean": float(np.mean(rmse_scores)),
-            "cv_rmse_std": float(np.std(rmse_scores, ddof=1)),
+            "cv_mae_mean": float(np.mean(fold_mae)),
+            "cv_mae_std": float(np.std(fold_mae, ddof=1)),
+            "cv_rmse_mean": float(np.mean(fold_rmse)),
+            "cv_rmse_std": float(np.std(fold_rmse, ddof=1)),
+            "cv_r2_mean": float(r2_score(y_values, oof_predictions)),
+            "cv_spread_ratio": oof_std / y_train_std if y_train_std > 1e-12 else 0.0,
         }
         candidate_results.append((candidate_name, parameters, summary))
 
-    best = min(
-        candidate_results,
-        key=lambda item: (item[2]["cv_mae_mean"], item[2]["cv_rmse_mean"]),
+    # --- Selection -----------------------------------------------------------
+    # 1. Accuracy first: keep only candidates whose CV MAE is within 6% of the
+    #    best CV MAE (statistically indistinguishable on typical data sizes).
+    # 2. Among those, prefer the candidate with the largest OOF prediction
+    #    spread, so a model that genuinely separates weak and strong students
+    #    wins over one that hugs the mean with the same accuracy.
+    # Accuracy is never sacrificed for spread: on data without signal the
+    # most accurate (mean-like) model is still chosen and a warning is raised.
+    best_mae = min(item[2]["cv_mae_mean"] for item in candidate_results)
+    best_cv_r2 = max(item[2]["cv_r2_mean"] for item in candidate_results)
+    if best_cv_r2 < LOW_SIGNAL_CV_R2:
+        # No candidate generalises: any extra spread would be noise, so pick
+        # the most accurate candidate outright.
+        best = min(
+            candidate_results,
+            key=lambda item: (item[2]["cv_mae_mean"], item[2]["cv_rmse_mean"]),
+        )
+        return best[0], best[1], best[2], cv_strategy
+    tolerance = best_mae * 1.06
+    shortlisted = [item for item in candidate_results if item[2]["cv_mae_mean"] <= tolerance]
+    best = max(
+        shortlisted,
+        key=lambda item: (item[2]["cv_spread_ratio"], -item[2]["cv_mae_mean"]),
     )
     return best[0], best[1], best[2], cv_strategy
 
@@ -212,6 +280,58 @@ def _summarize_feature_effects(
             "mean_signed_points": float(np.mean(values)),
         }
     return summaries
+
+
+LOW_SIGNAL_CV_R2 = 0.05
+LOW_SIGNAL_CORRELATION = 0.10
+
+
+def _max_abs_feature_correlation(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    contract: FeatureContract,
+) -> float:
+    """Largest |Pearson r| between any numeric feature and the target."""
+    target = pd.to_numeric(y_train, errors="coerce")
+    best = 0.0
+    for column in contract.numerical_features:
+        if column not in X_train.columns:
+            continue
+        values = pd.to_numeric(X_train[column], errors="coerce")
+        mask = values.notna() & target.notna()
+        if mask.sum() < 3 or values[mask].nunique() < 2 or target[mask].nunique() < 2:
+            continue
+        correlation = float(np.corrcoef(values[mask], target[mask])[0, 1])
+        if np.isfinite(correlation):
+            best = max(best, abs(correlation))
+    return best
+
+
+def _data_signal_warning(cv_r2: float, max_abs_correlation: float) -> str:
+    """Explain when the training labels are not predictable from the features.
+
+    If out-of-fold R² is ~0, no hyper-parameter choice can produce meaningful,
+    well-spread predictions: the best possible estimate is the average score,
+    which is exactly the "everything is 6-7 points" symptom.
+    """
+    if not np.isfinite(cv_r2) or cv_r2 >= LOW_SIGNAL_CV_R2:
+        return ""
+    message = (
+        f"Dữ liệu lịch sử gần như không có tín hiệu dự đoán: R² cross-validation = "
+        f"{cv_r2:.3f} (mô hình không giải thích được biến thiên của điểm cuối kỳ). "
+    )
+    if max_abs_correlation < LOW_SIGNAL_CORRELATION:
+        message += (
+            f"Tương quan lớn nhất giữa một biến đầu vào và điểm cuối kỳ chỉ là "
+            f"{max_abs_correlation:.3f}, tức điểm cuối kỳ trong tệp gần như ngẫu nhiên "
+            "so với TX1, giữa kỳ, chuyên cần, LMS... "
+        )
+    message += (
+        "Khi đó dự đoán tốt nhất về mặt thống kê là điểm trung bình, nên kết quả sẽ dồn "
+        "về một khoảng hẹp. Cần dữ liệu lịch sử thực tế (hoặc dữ liệu mô phỏng có quan hệ "
+        "hợp lý giữa điểm quá trình và điểm cuối kỳ) để mô hình phân biệt được sinh viên."
+    )
+    return message
 
 
 def train_xgboost_and_evaluate(
@@ -243,6 +363,11 @@ def train_xgboost_and_evaluate(
         contract,
         groups=training_groups,
     )
+    max_abs_correlation = _max_abs_feature_correlation(X_train, y_train, contract)
+    signal_warning = _data_signal_warning(
+        cv_metrics["cv_r2_mean"],
+        max_abs_correlation,
+    )
     evaluation_model = _new_pipeline(contract, selected_parameters)
     evaluation_model.fit(X_train, y_train)
 
@@ -255,6 +380,8 @@ def train_xgboost_and_evaluate(
             rmse=float("nan"),
             r2=float("nan"),
             **cv_metrics,
+            max_abs_feature_correlation=max_abs_correlation,
+            data_signal_warning=signal_warning,
             selected_candidate=selected_name,
             cv_strategy=cv_strategy,
         )
@@ -297,7 +424,14 @@ def train_xgboost_and_evaluate(
         mae=mae,
         rmse=float(np.sqrt(mean_squared_error(y_test, predictions))),
         r2=float(r2_score(y_test, predictions)) if len(y_test) >= 2 else float("nan"),
-        **cv_metrics,
+        cv_mae_mean=cv_metrics["cv_mae_mean"],
+        cv_mae_std=cv_metrics["cv_mae_std"],
+        cv_rmse_mean=cv_metrics["cv_rmse_mean"],
+        cv_rmse_std=cv_metrics["cv_rmse_std"],
+        cv_r2_mean=cv_metrics["cv_r2_mean"],
+        cv_spread_ratio=cv_metrics["cv_spread_ratio"],
+        max_abs_feature_correlation=max_abs_correlation,
+        data_signal_warning=signal_warning,
         baseline_mae=baseline_mae,
         baseline_rmse=float(np.sqrt(mean_squared_error(y_test, baseline_predictions))),
         actual_mean=float(np.mean(actual_values)),

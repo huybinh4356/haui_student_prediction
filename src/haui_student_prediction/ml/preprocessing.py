@@ -6,7 +6,9 @@ from sklearn.compose import ColumnTransformer
 
 
 def build_preprocessing_pipeline(
-    num_cols: List[str], cat_cols: List[str]
+    num_cols: List[str], cat_cols: List[str],
+    *,
+    scale_numeric: bool = False,
 ) -> ColumnTransformer:
     """Build a leakage-safe preprocessing ColumnTransformer.
 
@@ -16,17 +18,21 @@ def build_preprocessing_pipeline(
     full dataset before splitting.
 
     Handles (requirement #4):
-      * numeric columns: median imputation (handles missing values) + scaling.
+      * numeric columns: median imputation (handles missing values).
+        StandardScaler is only applied when *scale_numeric=True*; tree-based
+        models (XGBoost, CatBoost, Random Forest) are scale-invariant and
+        work better WITHOUT scaling because regularisation penalties
+        (reg_lambda, reg_alpha) operate on the raw feature magnitudes.
       * categorical columns: most-frequent imputation + OneHotEncoder with
         handle_unknown='ignore' (handles unseen categories at predict time).
     """
     transformers = []
 
     if num_cols:
-        num_transformer = Pipeline(steps=[
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-        ])
+        steps = [("imputer", SimpleImputer(strategy="median"))]
+        if scale_numeric:
+            steps.append(("scaler", StandardScaler()))
+        num_transformer = Pipeline(steps=steps)
         transformers.append(("num", num_transformer, num_cols))
 
     if cat_cols:

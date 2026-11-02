@@ -256,3 +256,32 @@ def test_uci_reader_extracts_csv_from_nested_student_zip(tmp_path):
     result = uci_data._read_csv_from_archive(archive_path, "student-por.csv")
 
     assert result.columns.tolist() == ["G1", "G2", "G3"]
+
+
+def test_train_and_register_uci_transfer_model(tmp_path, monkeypatch):
+    from dataclasses import replace
+    from haui_student_prediction.ml.uci_model_comparison import train_and_register_uci_transfer_model
+    from haui_student_prediction.app_config import load_config
+
+    test_registry_path = tmp_path / "registry.json"
+    test_artifacts_dir = tmp_path / "artifacts"
+    test_artifacts_dir.mkdir(parents=True, exist_ok=True)
+
+    dummy_config = replace(
+        load_config(),
+        model_registry_path=test_registry_path,
+        model_artifacts_dir=test_artifacts_dir,
+    )
+    monkeypatch.setattr("haui_student_prediction.app_config.load_config", lambda: dummy_config)
+
+    model, metrics, eval_result = train_and_register_uci_transfer_model(
+        subject="mat",
+        version="uci-transfer-test",
+        random_state=42,
+    )
+
+    assert model is not None
+    assert eval_result.r2 > 0.85
+    assert eval_result.mae < 1.0
+    assert eval_result.spread_ratio > 0.80
+    assert test_registry_path.exists()

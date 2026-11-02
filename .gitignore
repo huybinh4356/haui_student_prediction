@@ -7,7 +7,6 @@ __pycache__/
 .venv/
 venv/
 ENV/
-
 # Project Data (Mandatory Rule: Never commit real student data)
 data/raw/*
 data/staging/*
@@ -16,52 +15,47 @@ data/processed/*
 !data/raw/.gitkeep
 !data/staging/.gitkeep
 !data/processed/.gitkeep
-
 # Models and Outputs
 models/artifacts/*
 !models/artifacts/.gitkeep
 outputs/eda/*
 outputs/reports/*
 outputs/uci_model_comparison/*
+outputs/model_comparison/*
+outputs/data_audit/*
 !outputs/eda/.gitkeep
 !outputs/reports/.gitkeep
 !outputs/uci_model_comparison/.gitkeep
-
+!outputs/model_comparison/.gitkeep
+!outputs/data_audit/.gitkeep
 # Environment and Secrets
 .env
 .env.local
-
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
 # OS
 .DS_Store
 Thumbs.db
-
 # SQLite databases
 *.db
 *.sqlite
 *.sqlite3
-
 # Logs
 *.log
 logs/
-
 # Test artifacts
 tests/__pycache__/
 tests/**/__pycache__/
 .coverage
 htmlcov/
-
 # Build artifacts
 dist/
 build/
 *.egg-info/
-
 # Model artifacts
 models/artifacts/*.joblib
 models/artifacts/*.pkl

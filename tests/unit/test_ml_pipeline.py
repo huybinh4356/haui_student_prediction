@@ -223,7 +223,8 @@ def test_train_evaluate_normal(contract):
     assert np.isfinite(metrics.baseline_mae)
     assert metrics.prediction_unique_count >= 1
     assert metrics.cv_strategy == "KFold"
-    assert metrics.selected_candidate in {"conservative", "balanced", "more_flexible"}
+    from haui_student_prediction.ml.xgboost_regressor import CANDIDATE_CONFIGS
+    assert metrics.selected_candidate in CANDIDATE_CONFIGS
     assert 0 <= metrics.predicted_min <= metrics.predicted_max <= 10
     assert 0 <= metrics.actual_min <= metrics.actual_max <= 10
 

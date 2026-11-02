@@ -134,3 +134,35 @@ def get_default_column_mapping() -> Dict[str, str]:
         "Semester": "semester",
         "semester": "semester",
     }
+
+
+
+FEATURE_VIETNAMESE_NAMES: Dict[str, str] = {
+    "student_id": "Mã sinh viên",
+    "full_name": "Họ và tên",
+    "date_of_birth": "Ngày sinh",
+    "birth_year": "Năm sinh",
+    "hometown": "Quê quán",
+    "major": "Ngành học",
+    "course_id": "Mã học phần",
+    "semester": "Học kỳ",
+    "absence_percentage": "Tỷ lệ nghỉ học (%)",
+    "lms_learning_percentage": "Tỷ lệ học LMS (%)",
+    "tx1_score": "Điểm thường kỳ 1 (TX1)",
+    "tx2_score": "Điểm thường kỳ 2 (TX2)",
+    "midterm_score": "Điểm giữa kỳ (GK)",
+    "works_part_time": "Đi làm thêm",
+    "stress_score": "Mức độ stress",
+    "motivation_score": "Động lực học tập",
+    "interaction_score": "Mức độ tương tác",
+    "target_final_exam_score": "Điểm thi cuối kỳ thực tế",
+    "predicted_final_exam_score": "Điểm thi cuối kỳ dự đoán",
+    "predicted_course_score": "Điểm tổng kết học phần",
+    "risk_score": "Điểm nguy cơ",
+}
+
+
+def get_column_vietnamese_label(column: str) -> str:
+    """Chuyển đổi tên biến mã nguồn sang tên hiển thị Tiếng Việt chuẩn mực."""
+    clean = str(column).strip()
+    return FEATURE_VIETNAMESE_NAMES.get(clean, clean)

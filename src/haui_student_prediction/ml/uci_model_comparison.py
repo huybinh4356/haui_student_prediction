@@ -200,3 +200,101 @@ def compare_uci_models(
     ).reset_index(drop=True)
 
     return metrics, predictions_frame
+
+
+def train_and_register_uci_transfer_model(
+    subject: str = "mat",
+    version: str = "xgboost-2.2.0",
+    random_state: int = 42,
+) -> tuple[Pipeline, object, object]:
+    """
+    Huấn luyện mô hình chuyển giao quan hệ hành vi và học thuật từ dữ liệu chuẩn quốc tế UCI
+    và đăng ký vào ModelRegistry để làm mô hình dự đoán chính thức cho HaUI.
+    """
+    import hashlib
+    from pathlib import Path
+    from haui_student_prediction.app_config import load_config
+    from haui_student_prediction.data.uci_student_performance import load_uci_student_performance
+    from haui_student_prediction.features.feature_contract import FeatureContract
+    from haui_student_prediction.features.feature_builder import FeatureBuilder
+    from haui_student_prediction.ml.model_registry import ModelRegistry
+    from haui_student_prediction.ml.data_splitting import split_train_test
+    from haui_student_prediction.ml.xgboost_regressor import train_xgboost_and_evaluate
+    from haui_student_prediction.ml.accuracy_evaluator import compute_all_accuracy_metrics
+
+    project_root = Path(__file__).resolve().parents[3]
+    raw_dir = project_root / "data" / "raw" / "uci_student_performance"
+    uci_df = load_uci_student_performance(subject=subject, raw_dir=raw_dir)
+
+    n = len(uci_df)
+    mapped_df = pd.DataFrame()
+    mapped_df["student_id"] = [f"UCI_{subject.upper()}_{i+1:03d}" for i in range(n)]
+    mapped_df["full_name"] = [f"Student {subject.upper()} {i+1}" for i in range(n)]
+    mapped_df["major"] = "Khoa học máy tính"
+    mapped_df["course_id"] = "ITP101"
+    mapped_df["semester"] = "2026-1"
+
+    # G1 / 2.0 -> tx1_score (0-10)
+    mapped_df["tx1_score"] = np.round(uci_df["period1_grade"].astype(float) / 2.0, 1)
+    # G2 / 2.0 -> midterm_score (0-10)
+    mapped_df["midterm_score"] = np.round(uci_df["period2_grade"].astype(float) / 2.0, 1)
+
+    # absences -> absence_percentage (approx 2.5% per absence, capped at 100%)
+    mapped_df["absence_percentage"] = np.round(np.clip(uci_df["absence_count"].astype(float) * 2.5, 0.0, 100.0), 1)
+
+    # studytime (1-4) -> lms_learning_percentage (25% to 95%)
+    mapped_df["lms_learning_percentage"] = np.round(np.clip(uci_df["weekly_study_time_level"].astype(float) * 22.0 + 10.0, 0.0, 100.0), 1)
+
+    # Motivation & behavior
+    higher_intent = uci_df["higher_education_intent"].astype(str).str.lower().isin(["yes", "1", "true"])
+    mapped_df["motivation_score"] = np.where(higher_intent, 4.0, 2.0)
+    mapped_df["stress_score"] = 3.0
+    mapped_df["interaction_score"] = 3.5
+    mapped_df["works_part_time"] = False
+
+    # Target: G3 / 2.0 -> target_final_exam_score (0-10)
+    target_col = "target_final_exam_score"
+    mapped_df[target_col] = np.round(uci_df["target_course_grade"].astype(float) / 2.0, 1)
+
+    numeric_features = [
+        "tx1_score",
+        "midterm_score",
+        "absence_percentage",
+        "lms_learning_percentage",
+        "interaction_score",
+        "stress_score",
+        "motivation_score",
+    ]
+    categorical_features = ["works_part_time", "major", "course_id"]
+
+    contract = FeatureContract(
+        numerical_features=numeric_features,
+        categorical_features=categorical_features,
+        target_column=target_col,
+    )
+
+    train_data, test_data = split_train_test(mapped_df, test_size=0.2, random_state=random_state)
+    model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
+
+    builder = FeatureBuilder(contract)
+    X_test = builder.extract_features(test_data, is_training=False)
+    y_test_pred = model.predict(X_test)
+    y_test_true = test_data[target_col].values
+    sample_ids = test_data["student_id"].astype(str).tolist()
+    eval_result = compute_all_accuracy_metrics(y_test_true, y_test_pred, sample_ids=sample_ids)
+
+    config = load_config()
+    registry = ModelRegistry(str(config.model_registry_path), str(config.model_artifacts_dir))
+    dataset_hash = hashlib.sha256(
+        pd.util.hash_pandas_object(mapped_df, index=True).values.tobytes()
+    ).hexdigest()
+
+    registry.save_model(
+        model=model,
+        version=version,
+        dataset_hash=dataset_hash,
+        metrics=metrics,
+        contract=contract,
+    )
+
+    return model, metrics, eval_result

@@ -3,6 +3,11 @@ import hashlib
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import numpy as np
 import pandas as pd
 
@@ -93,9 +98,26 @@ def main() -> None:
 
     model, metrics = train_xgboost_and_evaluate(train_data, test_data, contract)
     print(f"Train: {len(train_data)} rows; Test: {len(test_data)} rows")
-    print(f"MAE:  {metrics.mae:.4f}")
-    print(f"RMSE: {metrics.rmse:.4f}")
-    print(f"R2:   {metrics.r2:.4f}" if np.isfinite(metrics.r2) else "R2:   N/A")
+
+    from haui_student_prediction.features.feature_builder import FeatureBuilder
+    from haui_student_prediction.ml.accuracy_evaluator import compute_all_accuracy_metrics
+
+    builder = FeatureBuilder(contract)
+    X_test = builder.extract_features(test_data, is_training=False)
+    y_test_pred = model.predict(X_test)
+    y_test_true = test_data[TARGET_COLUMN].values
+    sample_ids = test_data["student_id"].astype(str).tolist() if "student_id" in test_data.columns else None
+    eval_res = compute_all_accuracy_metrics(y_test_true, y_test_pred, sample_ids=sample_ids)
+
+    print("\n" + "=" * 88)
+    print(" BẢNG TOÀN BỘ CÁC THUỘC TÍNH ĐỘ CHÍNH XÁC CỦA MÔ HÌNH (TẬP TEST ĐỘC LẬP)")
+    print("=" * 88)
+    for _, row in eval_res.all_metrics_table.iterrows():
+        unit_str = f"({row['Đơn vị']})" if row['Đơn vị'] else ""
+        print(f"  {row['Nhóm chỉ số']:<18} | {row['Thuộc tính độ chính xác']:<38} | {row['Giá trị']:>14} {unit_str}")
+    print("-" * 88)
+    print(f"  Trạng thái co cụm: {eval_res.clustering_warning}")
+    print("=" * 88 + "\n")
 
     dataset_hash = hashlib.sha256(
         pd.util.hash_pandas_object(dataframe, index=True).values.tobytes()

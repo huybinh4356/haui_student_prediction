@@ -1,3 +1,4 @@
+from typing import Any
 from pathlib import Path
 
 import numpy as np
@@ -132,3 +133,48 @@ def load_historical_training_dataset(file_path: str) -> pd.DataFrame:
 
     _validate_required_training_features(feature_data.loc[valid].copy())
     return feature_data.reset_index(drop=True)
+
+
+def check_training_data_signal(
+    dataframe: pd.DataFrame,
+    target_column: str = TARGET_COLUMN,
+) -> dict[str, Any]:
+    """Inspect whether historical training labels correlate with input features.
+
+    When features have zero correlation with the final exam score (e.g. max |r| < 0.10),
+    any regression model mathematically converges to predicting the mean score (~6-7 points).
+    """
+    if target_column not in dataframe.columns:
+        return {"has_signal": False, "max_correlation": 0.0, "correlations": {}, "warning": "Thiếu cột target."}
+
+    target = pd.to_numeric(dataframe[target_column], errors="coerce")
+    valid_mask = target.notna() & np.isfinite(target.astype(float))
+
+    correlations = {}
+    max_abs_corr = 0.0
+    for col in dataframe.select_dtypes(include=[np.number]).columns:
+        if col == target_column:
+            continue
+        feat_vals = pd.to_numeric(dataframe[col], errors="coerce")
+        mask = valid_mask & feat_vals.notna()
+        if mask.sum() >= 5 and feat_vals[mask].nunique() > 1 and target[mask].nunique() > 1:
+            r = float(np.corrcoef(feat_vals[mask], target[mask])[0, 1])
+            if np.isfinite(r):
+                correlations[col] = r
+                max_abs_corr = max(max_abs_corr, abs(r))
+
+    has_signal = max_abs_corr >= 0.10
+    warning = ""
+    if not has_signal:
+        warning = (
+            f"CẢNH BÁO TÍN HIỆU DỮ LIỆU: Tương quan lớn nhất giữa điểm quá trình và điểm thi cuối kỳ "
+            f"chỉ là {max_abs_corr:.3f} (< 0.10). Dữ liệu này có tính chất ngẫu nhiên độc lập; "
+            "mô hình máy học sẽ có xu hướng dự đoán co cụm về điểm trung bình (~6-7 điểm)."
+        )
+
+    return {
+        "has_signal": has_signal,
+        "max_correlation": max_abs_corr,
+        "correlations": correlations,
+        "warning": warning,
+    }
