@@ -652,11 +652,17 @@ class MainWindow(QMainWindow):
         self.cb_course_profile.addItem("Học phần có TX2", "with_tx2")
         self.btn_train_from_prediction = self._primary_button("Chọn dữ liệu lịch sử & huấn luyện", self._handle_train_model, "warning")
         self.btn_predict = self._primary_button("Dự đoán điểm học phần", self._handle_predict, "success")
+        self.btn_export_prediction = self._primary_button(
+            "Xuất kết quả dự đoán",
+            lambda: self._export_dataframe("prediction"),
+            "primary",
+        )
         row.addWidget(QLabel("Cấu hình đánh giá"))
         row.addWidget(self.cb_course_profile, 1)
         row.addStretch(1)
         row.addWidget(self.btn_train_from_prediction)
         row.addWidget(self.btn_predict)
+        row.addWidget(self.btn_export_prediction)
         setup_layout.addLayout(row)
         self.lbl_prediction_notice = QLabel(
             "Tệp đang nhập ở trang Dữ liệu sinh viên là dữ liệu cần dự đoán và không cần điểm cuối kỳ thực tế. "
